@@ -1,0 +1,10 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pillow>=12.3.0
+psutil>=6.0.0
+pycaw==20240210
+comtypes>=1.4.4
+pywin32>=311
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.9
+qrcode[pil]>=7.4
