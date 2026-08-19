@@ -1,0 +1,18 @@
+# EAS Build's own file-collector doesn't reliably support the root .gitignore's
+# allowlist pattern (/* then !/frontend/ to re-include) the way real git does —
+# some ignore-parsers drop a directory entirely once a parent pattern matches it,
+# even if a later negation targets that exact directory. This file uses plain
+# deny-list rules instead, so frontend/ (and agent/) are never at risk of being
+# excluded by a misinterpreted negation.
+
+.claude/
+.pytest_cache/
+docs/
+run.py
+tether-app-plan.md
+
+**/__pycache__/
+**/*.pyc
+**/node_modules/
+**/.expo/
+**/dist/

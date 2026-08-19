@@ -6,6 +6,7 @@
 !/agent/
 !/frontend/
 !/.gitignore
+!/.easignore
 
 # Common junk, ignored even inside the kept folders
 **/__pycache__/
