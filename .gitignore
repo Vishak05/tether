@@ -1,0 +1,16 @@
+# Ignore everything at the repo root...
+# (this also excludes docs/ — phase summary docs are local-only, not tracked)
+/*
+
+# ...except the two main project folders and this file
+!/agent/
+!/frontend/
+!/.gitignore
+
+# Common junk, ignored even inside the kept folders
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/node_modules/
+**/.expo/
+**/dist/

@@ -61,3 +61,17 @@ JWT_ALGORITHM: str = "HS256"
 ACCESS_TOKEN_TTL:  int = int(os.getenv("TETHER_ACCESS_TTL",  "900"))   # 15 min
 REFRESH_TOKEN_TTL: int = int(os.getenv("TETHER_REFRESH_TTL", "2592000"))  # 30 days
 PAIRING_TOKEN_TTL: int = int(os.getenv("TETHER_PAIR_TTL",    "300"))    # 5 min
+
+# ──────────────────────────────────────────────
+# Phase 3 — Tailscale IP filtering
+# ──────────────────────────────────────────────
+
+# Tailscale's default tailnet range (CGNAT block, 100.64.0.0/10). Override if
+# your tailnet uses a custom range or you want to restrict to a single device IP.
+TAILSCALE_CIDR: str = os.getenv("TETHER_TAILSCALE_CIDR", "100.64.0.0/10")
+
+# Always allow loopback requests (localhost curl, Swagger UI, TestClient).
+ALLOW_LOCALHOST: bool = os.getenv("TETHER_ALLOW_LOCALHOST", "true").lower() == "true"
+
+# Escape hatch to disable IP filtering entirely (e.g. local dev on plain wifi).
+IP_FILTER_ENABLED: bool = os.getenv("TETHER_IP_FILTER_ENABLED", "true").lower() == "true"

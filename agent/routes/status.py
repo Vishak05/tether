@@ -25,7 +25,7 @@ log = get_logger("tether.status")
 
 # record when the agent started so we can report uptime
 _AGENT_START: float = time.time()
-AGENT_VERSION: str = "0.2.0-phase2"
+AGENT_VERSION: str = "0.3.0-phase3"
 
 
 class StatusResponse(BaseModel):

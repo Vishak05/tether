@@ -6,7 +6,7 @@ and the root health-check endpoint.
 
 Phase 1: No auth, same-wifi only.
 Phase 2: JWT middleware, pairing flow, device management, SQLite audit log.
-Phase 3 will add Tailscale IP filtering here.
+Phase 3: Tailscale IP filtering.
 Phase 4 will mount the WebSocket router here.
 """
 from contextlib import asynccontextmanager
@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agent.core import db
 from agent.core.config import LAPTOP_ID, PLATFORM
+from agent.core.ip_filter import TailscaleIPMiddleware
 from agent.core.logging import get_logger
 from agent.routes.auth import router as auth_router
 from agent.routes.commands import router as commands_router
@@ -46,22 +47,30 @@ def create_app() -> FastAPI:
             "Laptop-side agent for the Tether remote control app. "
             "Exposes command and status endpoints consumed by the mobile client."
         ),
-        version="0.2.0-phase2",
+        version="0.3.0-phase3",
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
     )
 
     # ── CORS ────────────────────────────────────────────────────────────────────
-    # Phase 2: still allow all origins for dev convenience.
-    # Phase 3: lock this down to Tailscale CIDR / known device IPs.
+    # CORS is a browser-enforced mechanism — the mobile client is a native app,
+    # not a browser, so it never sends the Origin headers CORS cares about.
+    # Left permissive on purpose; the real Phase 3 network boundary is the
+    # Tailscale IP filter below, not CORS.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+
+    # ── Tailscale IP filter ─────────────────────────────────────────────────────
+    # Added after CORS, which means it runs BEFORE CORS in Starlette's
+    # outer-to-inner middleware stack (last-added middleware wraps outermost).
+    # Rejects any request whose source IP isn't on the tailnet (or localhost).
+    app.add_middleware(TailscaleIPMiddleware)
 
     # ── routers ─────────────────────────────────────────────────────────────────
     app.include_router(pair_router)       # GET  /pair
@@ -77,7 +86,7 @@ def create_app() -> FastAPI:
             "service":   "tether-agent",
             "laptop_id": LAPTOP_ID,
             "platform":  PLATFORM,
-            "version":   "0.2.0-phase2",
+            "version":   "0.3.0-phase3",
             "status":    "ok",
         }
 
