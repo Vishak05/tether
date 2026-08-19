@@ -7,7 +7,7 @@ and the root health-check endpoint.
 Phase 1: No auth, same-wifi only.
 Phase 2: JWT middleware, pairing flow, device management, SQLite audit log.
 Phase 3: Tailscale IP filtering.
-Phase 4 will mount the WebSocket router here.
+Phase 4: WebSocket real-time status (WS /ws/status).
 """
 from contextlib import asynccontextmanager
 
@@ -21,8 +21,10 @@ from agent.core.logging import get_logger
 from agent.routes.auth import router as auth_router
 from agent.routes.commands import router as commands_router
 from agent.routes.devices import router as devices_router
+from agent.routes.files import router as files_router
 from agent.routes.pair import router as pair_router
 from agent.routes.status import router as status_router
+from agent.routes.ws_status import router as ws_status_router
 
 log = get_logger("tether.app")
 
@@ -47,7 +49,7 @@ def create_app() -> FastAPI:
             "Laptop-side agent for the Tether remote control app. "
             "Exposes command and status endpoints consumed by the mobile client."
         ),
-        version="0.3.0-phase3",
+        version="0.4.0-phase4",
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
@@ -78,6 +80,8 @@ def create_app() -> FastAPI:
     app.include_router(devices_router)    # GET  /devices, DELETE /devices/{id}
     app.include_router(commands_router)   # POST /commands/*
     app.include_router(status_router)     # GET  /status
+    app.include_router(ws_status_router)  # WS   /ws/status
+    app.include_router(files_router)      # GET/POST /files/*
 
     # ── root ────────────────────────────────────────────────────────────────────
     @app.get("/", tags=["health"], summary="Root health check")
@@ -86,7 +90,7 @@ def create_app() -> FastAPI:
             "service":   "tether-agent",
             "laptop_id": LAPTOP_ID,
             "platform":  PLATFORM,
-            "version":   "0.3.0-phase3",
+            "version":   "0.4.0-phase4",
             "status":    "ok",
         }
 

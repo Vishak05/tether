@@ -1,5 +1,12 @@
 import client from './client';
-import type { CommandResponse, ScreenshotResult, VolumeResult, WifiResult } from '../types/api';
+import type {
+  BrightnessResult,
+  CommandResponse,
+  MediaResult,
+  ScreenshotResult,
+  VolumeResult,
+  WifiResult,
+} from '../types/api';
 
 export async function lock(): Promise<CommandResponse> {
   const { data } = await client.post<CommandResponse>('/commands/lock');
@@ -8,6 +15,16 @@ export async function lock(): Promise<CommandResponse> {
 
 export async function sleep(): Promise<CommandResponse> {
   const { data } = await client.post<CommandResponse>('/commands/sleep');
+  return data;
+}
+
+export async function restart(): Promise<CommandResponse> {
+  const { data } = await client.post<CommandResponse>('/commands/restart');
+  return data;
+}
+
+export async function shutdown(): Promise<CommandResponse> {
+  const { data } = await client.post<CommandResponse>('/commands/shutdown');
   return data;
 }
 
@@ -23,5 +40,22 @@ export async function toggleWifi(enable: boolean | null = null): Promise<Command
 
 export async function takeScreenshot(): Promise<CommandResponse<ScreenshotResult>> {
   const { data } = await client.get<CommandResponse<ScreenshotResult>>('/commands/screenshot');
+  return data;
+}
+
+export type MediaAction = 'play_pause' | 'next' | 'previous' | 'stop';
+
+export async function sendMediaKey(action: MediaAction): Promise<CommandResponse<MediaResult>> {
+  const { data } = await client.post<CommandResponse<MediaResult>>('/commands/media', { action });
+  return data;
+}
+
+export async function getBrightness(): Promise<CommandResponse<BrightnessResult>> {
+  const { data } = await client.get<CommandResponse<BrightnessResult>>('/commands/brightness');
+  return data;
+}
+
+export async function setBrightness(level: number): Promise<CommandResponse<BrightnessResult>> {
+  const { data } = await client.post<CommandResponse<BrightnessResult>>('/commands/brightness', { level });
   return data;
 }

@@ -75,10 +75,38 @@ export interface ActiveWindowState {
   pid: number;
 }
 
+export interface SystemResources {
+  cpu_percent: number;
+  memory_percent: number;
+  disk_percent: number;
+}
+
 export interface LaptopState {
   battery: BatteryState | null;
   active_window: ActiveWindowState | null;
   locked: boolean;
+  system: SystemResources;
+  idle_secs: number | null;
+}
+
+// WS /ws/status heartbeat payload — same fields as LaptopState, flattened
+// alongside a discriminator and timestamp (see agent/routes/ws_status.py).
+export interface HeartbeatMessage {
+  type: 'heartbeat';
+  ts: string;
+  battery: BatteryState | null;
+  active_window: ActiveWindowState | null;
+  locked: boolean;
+  system: SystemResources;
+  idle_secs: number | null;
+}
+
+export interface MediaResult {
+  action: string;
+}
+
+export interface BrightnessResult {
+  brightness: number;
 }
 
 export interface StatusResponse {
@@ -92,4 +120,15 @@ export interface StatusResponse {
 
 export interface ApiErrorBody {
   detail: string | { loc: (string | number)[]; msg: string; type: string }[];
+}
+
+export interface FileEntry {
+  id: string;
+  name: string;
+  size_bytes: number;
+  modified_at: number;
+}
+
+export interface FileListResponse {
+  files: FileEntry[];
 }

@@ -14,6 +14,7 @@ routes/commands.py selects the right layer at import time.
 import base64
 import ctypes
 import io
+import os
 import subprocess
 import sys
 from typing import Any
@@ -41,6 +42,20 @@ try:
     _HAS_PYCAW = True
 except ImportError:
     _HAS_PYCAW = False
+
+try:
+    # The `wmi` package (a thin, well-behaved wrapper around win32com.client)
+    # is used instead of calling win32com.client directly for WMI method
+    # calls — raw win32com's positional-argument COM marshaling silently
+    # fails typed WMI methods like WmiSetBrightness with a generic "Invalid
+    # parameter" error (confirmed live: identical call succeeds via
+    # PowerShell's Get-WmiObject and via wmi's keyword-argument call, but
+    # fails via win32com.client's positional call). `wmi` calls methods with
+    # keyword arguments, which avoids the marshaling issue entirely.
+    import wmi as wmi_module
+    _HAS_WMI = True
+except ImportError:
+    _HAS_WMI = False
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -70,6 +85,89 @@ def sleep_system() -> dict:
         if result:
             return _ok("system sleeping")
         return _err("SetSuspendState returned 0")
+    except Exception as exc:
+        return _err(str(exc))
+
+
+def restart_system() -> dict:
+    """Restart the machine immediately (no forced app closure delay)."""
+    try:
+        subprocess.run(["shutdown", "/r", "/t", "0"], check=True, capture_output=True, timeout=10)
+        return _ok("restarting")
+    except subprocess.CalledProcessError as exc:
+        return _err(f"shutdown /r failed: {exc.stderr.decode(errors='replace').strip()}")
+    except Exception as exc:
+        return _err(str(exc))
+
+
+def shutdown_system() -> dict:
+    """Shut the machine down immediately."""
+    try:
+        subprocess.run(["shutdown", "/s", "/t", "0"], check=True, capture_output=True, timeout=10)
+        return _ok("shutting down")
+    except subprocess.CalledProcessError as exc:
+        return _err(f"shutdown /s failed: {exc.stderr.decode(errors='replace').strip()}")
+    except Exception as exc:
+        return _err(str(exc))
+
+
+# Virtual key codes for media keys (winuser.h)
+_VK_MEDIA_NEXT_TRACK = 0xB0
+_VK_MEDIA_PREV_TRACK = 0xB1
+_VK_MEDIA_STOP = 0xB2
+_VK_MEDIA_PLAY_PAUSE = 0xB3
+_MEDIA_KEYS = {
+    "play_pause": _VK_MEDIA_PLAY_PAUSE,
+    "next": _VK_MEDIA_NEXT_TRACK,
+    "previous": _VK_MEDIA_PREV_TRACK,
+    "stop": _VK_MEDIA_STOP,
+}
+_KEYEVENTF_KEYUP = 0x0002
+
+
+def media_control(action: str) -> dict:
+    """
+    Simulate a media key press (play/pause, next, previous, stop) — whatever
+    app currently owns the system media session (Spotify, browser, etc.)
+    receives it, same as a hardware media key would.
+    """
+    vk = _MEDIA_KEYS.get(action)
+    if vk is None:
+        return _err(f"Unknown media action '{action}' (expected one of {sorted(_MEDIA_KEYS)})")
+    try:
+        ctypes.windll.user32.keybd_event(vk, 0, 0, 0)
+        ctypes.windll.user32.keybd_event(vk, 0, _KEYEVENTF_KEYUP, 0)
+        return _ok({"action": action})
+    except Exception as exc:
+        return _err(str(exc))
+
+
+def get_brightness() -> dict:
+    """Read the internal display's current brightness (0-100). Laptop panels only."""
+    if not _HAS_WMI:
+        return _err("the 'wmi' package is not available")
+    try:
+        c = wmi_module.WMI(namespace="wmi")
+        monitors = c.WmiMonitorBrightness()
+        if not monitors:
+            return _err("No brightness-capable display found (internal laptop panel required)")
+        return _ok({"brightness": monitors[0].CurrentBrightness})
+    except Exception as exc:
+        return _err(str(exc))
+
+
+def set_brightness(level: int) -> dict:
+    """Set the internal display's brightness (0-100). Laptop panels only."""
+    level = max(0, min(100, level))
+    if not _HAS_WMI:
+        return _err("the 'wmi' package is not available")
+    try:
+        c = wmi_module.WMI(namespace="wmi")
+        methods = c.WmiMonitorBrightnessMethods()
+        if not methods:
+            return _err("No brightness-capable display found (internal laptop panel required)")
+        methods[0].WmiSetBrightness(Timeout=1, Brightness=level)
+        return _ok({"brightness": level})
     except Exception as exc:
         return _err(str(exc))
 
@@ -222,6 +320,16 @@ def get_status() -> dict:
     # whether the Desktop window station is accessible.
     payload["locked"] = _is_locked()
 
+    # System resources
+    payload["system"] = {
+        "cpu_percent": psutil.cpu_percent(interval=None),
+        "memory_percent": psutil.virtual_memory().percent,
+        "disk_percent": psutil.disk_usage(os.environ.get("SystemDrive", "C:") + "\\").percent,
+    }
+
+    # Idle time (seconds since last keyboard/mouse input)
+    payload["idle_secs"] = _get_idle_seconds()
+
     return _ok(payload)
 
 
@@ -241,3 +349,20 @@ def _is_locked() -> bool:
         return False
     except Exception:
         return False
+
+
+class _LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+
+def _get_idle_seconds() -> float | None:
+    """Seconds since the last keyboard/mouse input, system-wide."""
+    try:
+        lii = _LASTINPUTINFO()
+        lii.cbSize = ctypes.sizeof(_LASTINPUTINFO)
+        if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):
+            return None
+        tick_count = ctypes.windll.kernel32.GetTickCount()
+        return round((tick_count - lii.dwTime) / 1000, 1)
+    except Exception:
+        return None

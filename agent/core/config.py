@@ -73,5 +73,47 @@ TAILSCALE_CIDR: str = os.getenv("TETHER_TAILSCALE_CIDR", "100.64.0.0/10")
 # Always allow loopback requests (localhost curl, Swagger UI, TestClient).
 ALLOW_LOCALHOST: bool = os.getenv("TETHER_ALLOW_LOCALHOST", "true").lower() == "true"
 
+# Also allow plain private-LAN traffic (same WiFi/router), not just Tailscale.
+# Matches the original plan's "fallback to local IP when on same wifi" —
+# reaching the agent from the same network you're already trusted on is not
+# the same risk as the open internet, which is what this filter exists to
+# block. Covers the standard RFC1918 ranges.
+ALLOW_PRIVATE_LAN: bool = os.getenv("TETHER_ALLOW_PRIVATE_LAN", "true").lower() == "true"
+PRIVATE_LAN_CIDRS: list[str] = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+
 # Escape hatch to disable IP filtering entirely (e.g. local dev on plain wifi).
 IP_FILTER_ENABLED: bool = os.getenv("TETHER_IP_FILTER_ENABLED", "true").lower() == "true"
+
+# ──────────────────────────────────────────────
+# Phase 4 — WebSocket real-time status
+# ──────────────────────────────────────────────
+
+# How often (seconds) the /ws/status heartbeat pushes a fresh status snapshot.
+HEARTBEAT_INTERVAL_SECS: int = int(os.getenv("TETHER_HEARTBEAT_INTERVAL", "7"))
+
+# How many heartbeat ticks between re-checking the device's trust status, so a
+# mid-session revocation (DELETE /devices/{id}) closes the socket promptly
+# instead of only being enforced at the initial handshake.
+TRUST_RECHECK_EVERY_N_TICKS: int = int(os.getenv("TETHER_TRUST_RECHECK_TICKS", "4"))
+
+# ──────────────────────────────────────────────
+# File quick-send (watched-folder convention)
+# ──────────────────────────────────────────────
+
+# Drop files here for the phone to list/download.
+OUTBOX_DIR: Path = Path(os.getenv("TETHER_OUTBOX_DIR", str(Path.home() / "Tether Outbox")))
+OUTBOX_DIR.mkdir(parents=True, exist_ok=True)
+
+# Files uploaded from the phone land here.
+INBOX_DIR: Path = Path(os.getenv("TETHER_INBOX_DIR", str(Path.home() / "Tether Inbox")))
+INBOX_DIR.mkdir(parents=True, exist_ok=True)
+
+MAX_UPLOAD_MB: int = int(os.getenv("TETHER_MAX_UPLOAD_MB", "100"))
+
+# ──────────────────────────────────────────────
+# Live clipboard sync
+# ──────────────────────────────────────────────
+
+# How often (seconds) each open /ws/clipboard connection polls the Windows
+# clipboard for changes to push to the phone.
+CLIPBOARD_POLL_INTERVAL_SECS: float = float(os.getenv("TETHER_CLIPBOARD_POLL_INTERVAL", "1.5"))

@@ -143,3 +143,61 @@ async def cmd_screenshot(
     The mobile app decodes and displays this image inline.
     """
     return _respond("screenshot", win.take_screenshot(), request, device_id)
+
+
+@router.post("/restart", response_model=CommandResponse, summary="Restart the laptop")
+async def cmd_restart(
+    request: Request,
+    device_id: str = Depends(auth.require_auth),
+):
+    """Restart the machine immediately. Destructive — the phone UI should confirm first."""
+    return _respond("restart", win.restart_system(), request, device_id)
+
+
+@router.post("/shutdown", response_model=CommandResponse, summary="Shut down the laptop")
+async def cmd_shutdown(
+    request: Request,
+    device_id: str = Depends(auth.require_auth),
+):
+    """Shut the machine down immediately. Destructive — the phone UI should confirm first."""
+    return _respond("shutdown", win.shutdown_system(), request, device_id)
+
+
+class MediaBody(BaseModel):
+    action: str = Field(..., description="One of: play_pause, next, previous, stop")
+
+
+@router.post("/media", response_model=CommandResponse, summary="Send a media control key")
+async def cmd_media(
+    body: MediaBody,
+    request: Request,
+    device_id: str = Depends(auth.require_auth),
+):
+    """
+    Simulate a media key press. Whatever app currently owns the system media
+    session (Spotify, browser, etc.) receives it, same as a hardware key.
+    """
+    return _respond("media_control", win.media_control(body.action), request, device_id)
+
+
+class BrightnessBody(BaseModel):
+    level: int = Field(..., ge=0, le=100, description="Brightness level 0–100")
+
+
+@router.post("/brightness", response_model=CommandResponse, summary="Set display brightness")
+async def cmd_set_brightness(
+    body: BrightnessBody,
+    request: Request,
+    device_id: str = Depends(auth.require_auth),
+):
+    """Set the internal display's brightness (0-100). Laptop panels only."""
+    return _respond("brightness", win.set_brightness(body.level), request, device_id)
+
+
+@router.get("/brightness", response_model=CommandResponse, summary="Get display brightness")
+async def cmd_get_brightness(
+    request: Request,
+    device_id: str = Depends(auth.require_auth),
+):
+    """Read the internal display's current brightness (0-100). Laptop panels only."""
+    return _respond("brightness_get", win.get_brightness(), request, device_id)

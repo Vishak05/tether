@@ -63,6 +63,9 @@ export default function PairScreen() {
         <Pressable style={[styles.button, styles.buttonSecondary]} onPress={() => setMode('manual')}>
           <Text style={[styles.buttonText, styles.buttonTextSecondary]}>Enter code manually</Text>
         </Pressable>
+        <Pressable style={styles.linkButton} onPress={() => router.push('/(auth)/connect')}>
+          <Text style={styles.linkText}>Change laptop address</Text>
+        </Pressable>
       </View>
     );
   }
@@ -139,4 +142,6 @@ const styles = StyleSheet.create({
   buttonSecondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#2563eb' },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   buttonTextSecondary: { color: '#2563eb' },
+  linkButton: { alignItems: 'center', marginTop: 8 },
+  linkText: { color: '#666', fontSize: 14, textDecorationLine: 'underline' },
 });

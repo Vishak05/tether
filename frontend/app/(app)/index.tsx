@@ -1,26 +1,36 @@
-import { useQuery } from '@tanstack/react-query';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
-import { fetchStatus } from '../../src/api/status';
-import { lock, sleep, toggleWifi } from '../../src/api/commands';
+import { lock, restart, shutdown, sleep, toggleWifi } from '../../src/api/commands';
+import { BrightnessControl } from '../../src/components/BrightnessControl';
 import { CommandButton } from '../../src/components/CommandButton';
+import { MediaControls } from '../../src/components/MediaControls';
 import { ScreenshotViewer } from '../../src/components/ScreenshotViewer';
 import { StatusCard } from '../../src/components/StatusCard';
 import { VolumeControl } from '../../src/components/VolumeControl';
+import { useLiveStatus } from '../../src/hooks/useLiveStatus';
 
-// Polls GET /status until Phase 4 replaces this with the WebSocket heartbeat.
-const STATUS_POLL_MS = 5000;
+// Wraps a destructive action behind a confirm dialog, resolving/rejecting so
+// it can still be passed straight to CommandButton's onPress (which awaits
+// it and shows its own error alert on rejection).
+function confirmThen(title: string, message: string, action: () => Promise<unknown>): () => Promise<unknown> {
+  return () =>
+    new Promise((resolve, reject) => {
+      Alert.alert(title, message, [
+        { text: 'Cancel', style: 'cancel', onPress: () => reject(new Error('cancelled')) },
+        { text: title, style: 'destructive', onPress: () => action().then(resolve, reject) },
+      ]);
+    }).catch((err) => {
+      if (err instanceof Error && err.message === 'cancelled') return; // silent — user chose not to
+      throw err;
+    });
+}
 
 export default function DashboardScreen() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['status'],
-    queryFn: fetchStatus,
-    refetchInterval: STATUS_POLL_MS,
-  });
+  const { status, isLoading, isError, connected } = useLiveStatus();
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <StatusCard status={data} isLoading={isLoading} isError={isError} />
+      <StatusCard status={status} isLoading={isLoading} isError={isError} connected={connected} />
 
       <View style={styles.row}>
         <View style={styles.half}>
@@ -31,7 +41,26 @@ export default function DashboardScreen() {
         </View>
       </View>
 
+      <View style={styles.row}>
+        <View style={styles.half}>
+          <CommandButton
+            label="Restart"
+            variant="danger"
+            onPress={confirmThen('Restart', "Restart the laptop now? Any unsaved work will be lost.", restart)}
+          />
+        </View>
+        <View style={styles.half}>
+          <CommandButton
+            label="Shut Down"
+            variant="danger"
+            onPress={confirmThen('Shut Down', "Shut down the laptop now? You'll need physical access to turn it back on.", shutdown)}
+          />
+        </View>
+      </View>
+
       <VolumeControl />
+      <BrightnessControl />
+      <MediaControls />
 
       <CommandButton label="Toggle Wi-Fi" onPress={() => toggleWifi(null)} />
 

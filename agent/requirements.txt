@@ -8,3 +8,5 @@ pywin32>=311
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.9
 qrcode[pil]>=7.4
+httpx>=0.27
+wmi>=1.5.1

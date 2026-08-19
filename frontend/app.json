@@ -14,6 +14,23 @@
         {
           "cameraPermission": "Tether needs camera access to scan your laptop's pairing QR code."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-sharing",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true,
+          "bluetoothAlwaysPermission": "Tether uses Bluetooth to detect when your paired device is nearby, to auto-lock your laptop when it's not."
+        }
       ]
     ],
     "ios": {

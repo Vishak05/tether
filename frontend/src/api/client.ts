@@ -10,6 +10,13 @@ export function setApiBaseUrl(baseUrl: string): void {
   client.defaults.baseURL = baseUrl.replace(/\/+$/, '');
 }
 
+// Exported for anything that needs a fully-qualified URL rather than going
+// through the axios instance — e.g. expo-file-system's downloadAsync, which
+// takes a plain URL + headers rather than an axios request.
+export function getApiBaseUrl(): string {
+  return client.defaults.baseURL ?? '';
+}
+
 // Invoked when the refresh token itself is rejected (expired/device revoked) —
 // AuthContext registers this to clear stored session state and route back to Connect.
 let onAuthFailure: (() => void) | null = null;
@@ -27,10 +34,12 @@ client.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-// Single in-flight refresh shared across concurrent 401s so we don't fire N refresh calls.
+// Single in-flight refresh shared across concurrent 401s (and the WS hook's
+// own reconnect-time refresh, via refreshAccessToken below) so we never fire
+// more than one /auth/refresh call at a time.
 let refreshPromise: Promise<string | null> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
+async function doRefresh(): Promise<string | null> {
   const session = await getSession();
   if (!session) return null;
   try {
@@ -43,6 +52,19 @@ async function refreshAccessToken(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+// Exported for src/hooks/useLiveStatus.ts, which needs a guaranteed-fresh
+// access token when (re)establishing the WebSocket connection — the socket
+// handshake is verified once server-side, so reconnecting with a token that
+// already expired while the app was backgrounded would otherwise loop.
+export async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = doRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
 }
 
 client.interceptors.response.use(
@@ -58,12 +80,7 @@ client.interceptors.response.use(
     ) {
       originalRequest._retried = true;
 
-      if (!refreshPromise) {
-        refreshPromise = refreshAccessToken().finally(() => {
-          refreshPromise = null;
-        });
-      }
-      const newAccessToken = await refreshPromise;
+      const newAccessToken = await refreshAccessToken();
 
       if (newAccessToken) {
         originalRequest.headers.set('Authorization', `Bearer ${newAccessToken}`);

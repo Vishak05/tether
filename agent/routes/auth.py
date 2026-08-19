@@ -80,7 +80,7 @@ async def pair_device(body: PairRequest) -> PairResponse:
     access  = auth.create_access_token(device_id)
     refresh = auth.create_refresh_token(device_id)
 
-    log.info("device paired", extra={"device_id": device_id, "name": body.device_name})
+    log.info("device paired", extra={"device_id": device_id, "device_name": body.device_name})
     return PairResponse(
         device_id=device_id,
         access_token=access,
