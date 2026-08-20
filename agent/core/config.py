@@ -37,6 +37,11 @@ PLATFORM: str = platform.system()   # "Windows", "Linux", "Darwin"
 _TETHER_DIR = Path.home() / ".tether"
 _TETHER_DIR.mkdir(parents=True, exist_ok=True)
 
+# Where get_logger() writes agent.log — same directory as the DB/secret file.
+# Needs to exist even when running headless via pythonw.exe (no console to
+# fall back to), which is exactly the scenario this is for.
+LOG_DIR: Path = _TETHER_DIR
+
 # SQLite database path
 DB_PATH: Path = Path(os.getenv("TETHER_DB_PATH", str(_TETHER_DIR / "tether.db")))
 

@@ -9,6 +9,7 @@ const KEYS = {
   autoLockEnabled: 'tether.auto_lock_enabled',
   autoLockAnchorId: 'tether.auto_lock_anchor_id',
   autoLockAnchorName: 'tether.auto_lock_anchor_name',
+  downloadsDirectoryUri: 'tether.downloads_directory_uri',
 } as const;
 
 export async function getBaseUrl(): Promise<string | null> {
@@ -91,4 +92,18 @@ export async function clearAutoLockAnchor(): Promise<void> {
     SecureStore.deleteItemAsync(KEYS.autoLockAnchorId),
     SecureStore.deleteItemAsync(KEYS.autoLockAnchorName),
   ]);
+}
+
+// ── Downloads folder (Android Storage Access Framework) ────────────────────
+
+export async function getDownloadsDirectoryUri(): Promise<string | null> {
+  return SecureStore.getItemAsync(KEYS.downloadsDirectoryUri);
+}
+
+export async function setDownloadsDirectoryUri(uri: string): Promise<void> {
+  await SecureStore.setItemAsync(KEYS.downloadsDirectoryUri, uri);
+}
+
+export async function clearDownloadsDirectoryUri(): Promise<void> {
+  await SecureStore.deleteItemAsync(KEYS.downloadsDirectoryUri);
 }

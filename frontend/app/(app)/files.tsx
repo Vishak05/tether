@@ -1,13 +1,14 @@
+import { useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { getApiErrorMessage } from '../../src/api/errors';
 import { getOutboxDownloadTarget, listInbox, listOutbox, uploadToInbox } from '../../src/api/files';
 import type { FileEntry } from '../../src/types/api';
+import { saveFileToDownloads } from '../../src/utils/saveToDownloads';
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -38,22 +39,47 @@ export default function FilesScreen() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
+  // React Query has no built-in "refetch when this tab regains focus" for
+  // React Native (that's a web-only default) — without this, switching to
+  // another tab and back showed stale data until the whole app was reloaded.
+  useFocusEffect(
+    useCallback(() => {
+      outbox.refetch();
+      inbox.refetch();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+  );
+
+  const refreshing = outbox.isRefetching || inbox.isRefetching;
+  const handleRefresh = () => {
+    outbox.refetch();
+    inbox.refetch();
+  };
+
   const handleDownload = async (entry: FileEntry) => {
     setBusyId(entry.id);
+    let cacheFile: File | null = null;
     try {
       const target = await getOutboxDownloadTarget(entry.id);
       const destination = new File(Paths.cache, entry.name);
+      // The cache copy is always cleaned up in `finally` below, so this
+      // destination shouldn't already exist — but guard against a stale
+      // leftover from a previous run that got killed mid-download.
+      if (destination.exists) destination.delete();
       const task = File.createDownloadTask(target.url, destination, { headers: target.headers });
-      const file = await task.downloadAsync();
-      if (!file) throw new Error('Download did not complete');
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(file.uri);
-      } else {
-        Alert.alert('Downloaded', `Saved to ${file.uri}`);
-      }
+      cacheFile = await task.downloadAsync();
+      if (!cacheFile) throw new Error('Download did not complete');
+      await saveFileToDownloads(cacheFile);
+      Alert.alert('Downloaded', `${entry.name} saved.`);
     } catch (err) {
-      Alert.alert('Download failed', getApiErrorMessage(err));
+      const message = err instanceof Error ? err.message : getApiErrorMessage(err);
+      Alert.alert('Download failed', message);
     } finally {
+      try {
+        cacheFile?.delete();
+      } catch {
+        // best-effort cleanup of the temp cache copy — not worth surfacing
+      }
       setBusyId(null);
     }
   };
@@ -77,7 +103,7 @@ export default function FilesScreen() {
   return (
     <ScrollView
       contentContainerStyle={styles.container}
-      refreshControl={undefined}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
     >
       <Pressable style={styles.uploadButton} onPress={handleUpload} disabled={uploading}>
         <Text style={styles.uploadText}>{uploading ? 'Uploading…' : 'Send a file to laptop'}</Text>

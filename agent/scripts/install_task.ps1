@@ -38,11 +38,32 @@
         already running is just ignored — no duplicate process — but a
         firing while it's dead starts a fresh one. Confirmed working during
         testing; the failure-restart policy alone was not.
+      - Launches via pythonw.exe, not python.exe. Confirmed live: Task
+        Scheduler's "Interactive" logon type gives a console-subsystem exe
+        (python.exe) a real, visible console window on the desktop — not
+        actually background at all, just an unattended one you'd have to
+        manually close or ignore. pythonw.exe is the windowless variant of
+        the same interpreter and never allocates a console. This does mean
+        sys.stdout is None inside the process — agent/core/logging.py
+        accounts for this (writes to ~/.tether/agent.log unconditionally,
+        only adds a stdout handler when a console is actually present), so
+        logs aren't lost, just no longer visible in a window.
+      - Runs agent\scripts\run_headless.py instead of `-m uvicorn ...`
+        directly. Confirmed live: even with pythonw.exe's stdout/stderr
+        correctly handled by our own logger, uvicorn's *own* default logging
+        setup still crashes the process on its first internal log line under
+        a None stdout/stderr — the agent's "starting" line made it to
+        agent.log, then the process silently vanished with no further
+        activity and no visible error anywhere. run_headless.py passes
+        `log_config=None` to uvicorn.run() so it never installs that logging
+        setup in the first place. See run_headless.py's own docstring for
+        the full diagnosis.
 
 .PARAMETER PythonPath
-    Path to the python.exe that has the agent's dependencies installed.
-    Defaults to C:\Python314\python.exe, matching run.py's own instructions
-    for this machine's current setup (see run.py's docstring).
+    Path to the python.exe (or pythonw.exe) that has the agent's dependencies
+    installed. Defaults to C:\Python314\python.exe — but if a pythonw.exe
+    exists next to it, that's used instead automatically (see DESCRIPTION),
+    so you don't need to pass the windowless variant explicitly.
 
 .PARAMETER TaskName
     Name of the scheduled task. Defaults to "TetherAgent".
@@ -86,8 +107,17 @@ if (-not (Test-Path (Join-Path $repoRoot "agent\main.py"))) {
     exit 1
 }
 
-$uvicornArgs = "-m uvicorn agent.main:app --host $BindHost --port $Port"
-$action = New-ScheduledTaskAction -Execute $PythonPath -Argument $uvicornArgs -WorkingDirectory $repoRoot
+# Prefer the windowless pythonw.exe if it sits next to the given interpreter —
+# see DESCRIPTION for why python.exe isn't actually invisible under Task Scheduler.
+$windowlessPath = Join-Path (Split-Path -Parent $PythonPath) "pythonw.exe"
+if ((Split-Path -Leaf $PythonPath) -ieq "python.exe" -and (Test-Path $windowlessPath)) {
+    $PythonPath = $windowlessPath
+    Write-Host "Using windowless interpreter: $PythonPath"
+}
+
+$entryScript = Join-Path $repoRoot "agent\scripts\run_headless.py"
+$runArgs = "`"$entryScript`" --host $BindHost --port $Port"
+$action = New-ScheduledTaskAction -Execute $PythonPath -Argument $runArgs -WorkingDirectory $repoRoot
 
 $logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 
