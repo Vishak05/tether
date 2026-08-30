@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from agent.core import db
+from agent.core import db, proximity
 from agent.core.config import LAPTOP_ID, PLATFORM
 from agent.core.ip_filter import TailscaleIPMiddleware
 from agent.core.logging import get_logger
@@ -23,6 +23,7 @@ from agent.routes.commands import router as commands_router
 from agent.routes.devices import router as devices_router
 from agent.routes.files import router as files_router
 from agent.routes.pair import router as pair_router
+from agent.routes.proximity import router as proximity_router
 from agent.routes.status import router as status_router
 from agent.routes.ws_status import router as ws_status_router
 
@@ -36,8 +37,22 @@ async def lifespan(app: FastAPI):
     # Initialise SQLite schema (no-op if tables already exist)
     db.init_db()
     log.info("Tether agent starting", extra={"laptop_id": LAPTOP_ID, "platform": PLATFORM})
-    yield
-    log.info("Tether agent shutting down")
+
+    # Proximity auto-lock polls for the paired phone over Bluetooth and locks
+    # the workstation when it's been out of range long enough. It starts
+    # regardless of whether the feature is enabled — the loop reads its own
+    # settings each tick and idles when off, so toggling it from the phone
+    # doesn't require restarting the agent (which runs as a scheduled task the
+    # user can't restart from the app).
+    await proximity.SERVICE.start()
+
+    try:
+        yield
+    finally:
+        # try/finally so shutdown still runs if the app errors out — a
+        # bare post-yield block would be skipped.
+        await proximity.SERVICE.stop()
+        log.info("Tether agent shutting down")
 
 
 # ── app factory ────────────────────────────────────────────────────────────────
@@ -82,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(status_router)     # GET  /status
     app.include_router(ws_status_router)  # WS   /ws/status
     app.include_router(files_router)      # GET/POST /files/*
+    app.include_router(proximity_router)  # GET/PATCH /proximity, GET /proximity/bonded
 
     # ── root ────────────────────────────────────────────────────────────────────
     @app.get("/", tags=["health"], summary="Root health check")

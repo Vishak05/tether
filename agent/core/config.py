@@ -122,3 +122,33 @@ MAX_UPLOAD_MB: int = int(os.getenv("TETHER_MAX_UPLOAD_MB", "100"))
 # How often (seconds) each open /ws/clipboard connection polls the Windows
 # clipboard for changes to push to the phone.
 CLIPBOARD_POLL_INTERVAL_SECS: float = float(os.getenv("TETHER_CLIPBOARD_POLL_INTERVAL", "1.5"))
+
+# ──────────────────────────────────────────────
+# Proximity auto-lock (agent-side Bluetooth presence)
+# ──────────────────────────────────────────────
+
+# These are DEFAULTS only. Live values are stored in the agent_settings table
+# and are what the service actually reads — the phone has to be able to change
+# them at runtime, and an env var can't be changed in a running process
+# without restarting the scheduled task.
+
+# Off unless explicitly enabled. A feature that locks your machine on its own
+# should never switch itself on.
+PROXIMITY_ENABLED_DEFAULT: bool = os.getenv("TETHER_PROX_ENABLED", "false").lower() == "true"
+PROXIMITY_TARGET_MAC_DEFAULT: str = os.getenv("TETHER_PROX_TARGET_MAC", "")
+
+# Seconds between probes. 20s x 3 misses => ~60s of absence before locking.
+PROXIMITY_POLL_INTERVAL_SECS: int = int(os.getenv("TETHER_PROX_POLL_INTERVAL", "20"))
+PROXIMITY_MISS_THRESHOLD: int = int(os.getenv("TETHER_PROX_MISS_THRESHOLD", "3"))
+
+# Measured: an in-range SDP query answers in 1.3-2.3s, and out of range it
+# never answers at all. 8s leaves generous headroom over the in-range worst
+# case while still finishing well inside the poll interval.
+PROXIMITY_PROBE_TIMEOUT_SECS: float = float(os.getenv("TETHER_PROX_PROBE_TIMEOUT", "8.0"))
+
+# Bounds enforced on values arriving from the API, so a bad phone-side value
+# can't turn the loop into a tight spin or a one-tick hair-trigger.
+PROXIMITY_MIN_POLL_INTERVAL_SECS: int = 10
+PROXIMITY_MAX_POLL_INTERVAL_SECS: int = 300
+PROXIMITY_MIN_MISS_THRESHOLD: int = 1
+PROXIMITY_MAX_MISS_THRESHOLD: int = 20

@@ -82,7 +82,39 @@ def init_db() -> None:
                 ON command_audit_log (device_id);
             CREATE INDEX IF NOT EXISTS idx_audit_ts
                 ON command_audit_log (ts);
+
+            CREATE TABLE IF NOT EXISTS agent_settings (
+                key        TEXT PRIMARY KEY,
+                value      TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
         """)
+
+
+# ── agent_settings ─────────────────────────────────────────────────────────────
+# Generic key/value store for settings the phone can change at runtime.
+# Deliberately generic rather than a proximity-specific table: env vars can't
+# be changed in a running process, and the next feature that needs a toggle
+# shouldn't need another migration.
+
+def get_setting(key: str, default: str | None = None) -> str | None:
+    with _conn() as con:
+        row = con.execute("SELECT value FROM agent_settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(key: str, value: str) -> None:
+    """Upsert a single setting."""
+    with _conn() as con:
+        con.execute(
+            """
+            INSERT INTO agent_settings (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+                                           updated_at = excluded.updated_at
+            """,
+            (key, value, _now()),
+        )
 
 
 # ── paired_devices ─────────────────────────────────────────────────────────────
