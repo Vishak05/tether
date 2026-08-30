@@ -34,5 +34,6 @@ if __name__ == "__main__":
         host=HOST,
         port=PORT,
         reload=True,
+        reload_dirs=["agent"],
         log_level=LOG_LEVEL.lower(),
     )
