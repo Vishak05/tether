@@ -111,12 +111,27 @@ def list_bonded_devices() -> list[tuple[str, str]]:
     return sorted(devices, key=lambda d: d[1].lower())
 
 
+# A response arriving this fast cannot have involved a failed page attempt —
+# the radio answered, so the device is in range regardless of which error the
+# stack chose to report. Measured on this hardware: an in-range rejection
+# comes back in 0.01-0.30s, while an out-of-range page runs to the full
+# timeout. Anything in between is genuinely ambiguous and treated as absent,
+# which is the safe direction for a lock.
+_FAST_RESPONSE_SECS = 1.0
+
+
 def probe_once(mac: str, channel: int, timeout: float) -> tuple[bool, str, float]:
     """
     One presence probe.
 
-    Returns (present, classification, elapsed_secs). classification is one of
-    'connected', 'refused', 'timeout', 'unreachable', or 'error:<errno>'.
+    Returns (present, classification, elapsed_secs).
+
+    Presence is decided by whether the remote radio *answered*, not by whether
+    the connect succeeded:
+      - connected                     → present (a service accepted)
+      - refused                       → present (radio answered, declined)
+      - any error, answered fast      → present (see _FAST_RESPONSE_SECS)
+      - timeout / slow error          → absent  (nothing answered the page)
     """
     started = time.perf_counter()
     sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
@@ -132,12 +147,12 @@ def probe_once(mac: str, channel: int, timeout: float) -> tuple[bool, str, float
     except OSError as exc:
         elapsed = time.perf_counter() - started
         code = getattr(exc, "winerror", None) or exc.errno
+        if elapsed < _FAST_RESPONSE_SECS:
+            return True, f"fast-reject({code})", elapsed
         if code in _ABSENT_ERRNOS:
             label = "unreachable" if code != 10060 else "timeout"
             return False, f"{label}({code})", elapsed
-        # Anything else means the radio responded with *something*, which we
-        # read as presence. The spike exists to find out what shows up here.
-        return True, f"error:{code}", elapsed
+        return False, f"error:{code}", elapsed
     finally:
         try:
             sock.close()
@@ -156,7 +171,7 @@ def scan_channels(mac: str, timeout: float, upto: int = 10) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mac", help="Target device MAC (any separator style)")
-    parser.add_argument("--channel", type=int, default=1, help="RFCOMM channel (default: 1)")
+    parser.add_argument("--channel", type=int, default=7, help="RFCOMM channel (default: 7 — the one that answers on this phone)")
     parser.add_argument("--timeout", type=float, default=4.0, help="Per-probe timeout in seconds (default: 4.0)")
     parser.add_argument("--interval", type=float, default=10.0, help="Seconds between probes (default: 10)")
     parser.add_argument("--count", type=int, default=0, help="Number of probes; 0 = until Ctrl+C (default: 0)")
