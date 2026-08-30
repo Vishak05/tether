@@ -8,6 +8,7 @@ import { getApiErrorMessage } from '../../src/api/errors';
 import { fetchBondedDevices, fetchProximity, updateProximity } from '../../src/api/proximity';
 import { useAuth } from '../../src/auth/AuthContext';
 import type { BondedDevice } from '../../src/types/api';
+import { proximityStatusLine } from '../../src/utils/proximityStatus';
 
 export default function SettingsScreen() {
   const { baseUrl, logout } = useAuth();
@@ -74,14 +75,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const statusLine = (() => {
-    if (!state) return 'Loading…';
-    if (!state.enabled) return 'Off';
-    if (state.last_error) return `Can't check right now — ${state.last_error}`;
-    if (state.present === null) return 'Waiting for the first check…';
-    if (state.present) return 'Phone detected nearby';
-    return `Phone not detected (${state.consecutive_misses} of ${state.miss_threshold})`;
-  })();
+  const statusLine = proximityStatusLine(state);
 
   const lockDelaySecs = state ? state.poll_interval_secs * state.miss_threshold : 0;
 
