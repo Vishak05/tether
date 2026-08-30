@@ -87,6 +87,12 @@ export interface LaptopState {
   locked: boolean;
   system: SystemResources;
   idle_secs: number | null;
+  // null when the laptop can't report it (no audio endpoint / no
+  // brightness-capable display). The UI must disable the control rather than
+  // substitute a default — inventing a value is what made the first volume
+  // tap snap the laptop to a made-up level.
+  volume: number | null;
+  brightness: number | null;
 }
 
 // WS /ws/status heartbeat payload — same fields as LaptopState, flattened
@@ -99,6 +105,8 @@ export interface HeartbeatMessage {
   locked: boolean;
   system: SystemResources;
   idle_secs: number | null;
+  volume: number | null;
+  brightness: number | null;
 }
 
 export interface MediaResult {

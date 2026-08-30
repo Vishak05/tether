@@ -67,6 +67,56 @@ def _err(msg: str) -> dict:
     return {"ok": False, "error": msg}
 
 
+# ── cached COM / WMI handles ──────────────────────────────────────────────────
+# get_status() now reports volume and brightness, and it runs on every
+# WebSocket heartbeat (HEARTBEAT_INTERVAL_SECS, default 7s, per connection).
+# Building a fresh wmi.WMI() connection costs full COM + WMI namespace setup
+# every call (~100-300ms), which is far too expensive at that cadence, and
+# re-Activating the pycaw endpoint each time is needless overhead too — so
+# both handles are built once and reused.
+#
+# Safe to cache as plain module globals because every caller (the heartbeat
+# loop in routes/ws_status.py and the async route handlers in
+# routes/commands.py) runs on the same asyncio event-loop thread; COM
+# interface pointers are apartment-bound and must not be shared across
+# threads. If that ever changes, these need to move to thread-local storage.
+_wmi_conn: Any = None
+_volume_iface: Any = None
+
+
+def _get_wmi() -> Any:
+    """Lazily build and cache the WMI connection used for brightness."""
+    global _wmi_conn
+    if _wmi_conn is None:
+        _wmi_conn = wmi_module.WMI(namespace="wmi")
+    return _wmi_conn
+
+
+def _get_volume_iface() -> Any:
+    """Lazily build and cache the pycaw master-volume endpoint interface."""
+    global _volume_iface
+    if _volume_iface is None:
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, comtypes.CLSCTX_ALL, None)
+        _volume_iface = cast(interface, POINTER(IAudioEndpointVolume))
+    return _volume_iface
+
+
+def _invalidate_com_caches() -> None:
+    """
+    Drop the cached handles so the next call rebuilds them.
+
+    Called whenever a cached handle raises — the usual cause is the underlying
+    device going away (default audio endpoint switched to headphones, monitor
+    disconnected), which leaves the cached COM pointer permanently dead.
+    Without this, one transient device change would break volume/brightness
+    until the agent restarted.
+    """
+    global _wmi_conn, _volume_iface
+    _wmi_conn = None
+    _volume_iface = None
+
+
 # ── commands ──────────────────────────────────────────────────────────────────
 
 def lock_workstation() -> dict:
@@ -147,12 +197,12 @@ def get_brightness() -> dict:
     if not _HAS_WMI:
         return _err("the 'wmi' package is not available")
     try:
-        c = wmi_module.WMI(namespace="wmi")
-        monitors = c.WmiMonitorBrightness()
+        monitors = _get_wmi().WmiMonitorBrightness()
         if not monitors:
             return _err("No brightness-capable display found (internal laptop panel required)")
         return _ok({"brightness": monitors[0].CurrentBrightness})
     except Exception as exc:
+        _invalidate_com_caches()
         return _err(str(exc))
 
 
@@ -162,14 +212,35 @@ def set_brightness(level: int) -> dict:
     if not _HAS_WMI:
         return _err("the 'wmi' package is not available")
     try:
-        c = wmi_module.WMI(namespace="wmi")
-        methods = c.WmiMonitorBrightnessMethods()
+        methods = _get_wmi().WmiMonitorBrightnessMethods()
         if not methods:
             return _err("No brightness-capable display found (internal laptop panel required)")
         methods[0].WmiSetBrightness(Timeout=1, Brightness=level)
         return _ok({"brightness": level})
     except Exception as exc:
+        _invalidate_com_caches()
         return _err(str(exc))
+
+
+def get_volume() -> dict:
+    """
+    Read the current master system volume (0-100).
+
+    The counterpart to set_volume(). Without this the phone had no way to
+    learn the laptop's real volume, so VolumeControl displayed a hardcoded
+    50% and its first step command snapped the laptop to that made-up
+    baseline. There is no PowerShell fallback here — the fallback in
+    set_volume() works by sending volume-up/down keystrokes, which can set a
+    level but cannot read one.
+    """
+    if not _HAS_PYCAW:
+        return _err("the 'pycaw' package is not available")
+    try:
+        scalar = _get_volume_iface().GetMasterVolumeLevelScalar()
+        return _ok({"volume": round(scalar * 100)})
+    except Exception as exc:
+        _invalidate_com_caches()
+        return _err(f"pycaw error: {exc}")
 
 
 def set_volume(level: int) -> dict:
@@ -186,13 +257,11 @@ def set_volume(level: int) -> dict:
 
     if _HAS_PYCAW:
         try:
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(IAudioEndpointVolume._iid_, comtypes.CLSCTX_ALL, None)
-            volume = cast(interface, POINTER(IAudioEndpointVolume))
             # IAudioEndpointVolume uses scalar 0.0–1.0
-            volume.SetMasterVolumeLevelScalar(level / 100.0, None)
+            _get_volume_iface().SetMasterVolumeLevelScalar(level / 100.0, None)
             return _ok({"volume": level})
         except Exception as exc:
+            _invalidate_com_caches()
             return _err(f"pycaw error: {exc}")
 
     # PowerShell fallback
@@ -329,6 +398,20 @@ def get_status() -> dict:
 
     # Idle time (seconds since last keyboard/mouse input)
     payload["idle_secs"] = _get_idle_seconds()
+
+    # Volume / brightness — reported so the phone's controls can mirror the
+    # laptop's real state and keep tracking it, instead of holding their own
+    # invented value. Both are None when unavailable (no audio endpoint, or an
+    # external monitor with no WMI brightness support); the UI renders that as
+    # a disabled control rather than guessing a number.
+    #
+    # Both go through the cached COM/WMI handles above — this runs on every
+    # heartbeat tick, so rebuilding those connections here would be costly.
+    vol = get_volume()
+    payload["volume"] = vol["result"]["volume"] if vol["ok"] else None
+
+    bright = get_brightness()
+    payload["brightness"] = bright["result"]["brightness"] if bright["ok"] else None
 
     return _ok(payload)
 

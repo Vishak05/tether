@@ -58,8 +58,16 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      <VolumeControl />
-      <BrightnessControl />
+      {/* Both are driven by the live status heartbeat rather than their own
+          local state, so they show the laptop's real levels and keep tracking
+          them. The values are threaded through from here because useLiveStatus
+          opens a WebSocket per call — calling it inside each control would
+          open duplicate connections. */}
+      <VolumeControl level={status?.state?.volume ?? null} />
+      <BrightnessControl
+        level={status?.state?.brightness ?? null}
+        statusLoaded={status?.state != null}
+      />
       <MediaControls />
 
       <CommandButton label="Toggle Wi-Fi" onPress={() => toggleWifi(null)} />

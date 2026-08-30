@@ -99,6 +99,8 @@ export function useLiveStatus() {
               locked: heartbeat.locked,
               system: heartbeat.system,
               idle_secs: heartbeat.idle_secs,
+              volume: heartbeat.volume,
+              brightness: heartbeat.brightness,
             }
           : meta.data.state,
       }

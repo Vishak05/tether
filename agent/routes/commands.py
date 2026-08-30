@@ -111,6 +111,22 @@ async def cmd_volume(
     return _respond("volume", win.set_volume(body.level), request, device_id)
 
 
+@router.get("/volume", response_model=CommandResponse, summary="Get master volume")
+async def cmd_volume_get(
+    request: Request,
+    device_id: str = Depends(auth.require_auth),
+):
+    """
+    Read the current Windows master audio volume (0–100).
+
+    Mirrors GET /commands/brightness. The volume is also included in the
+    /status payload and every /ws/status heartbeat; this exists so the app can
+    show a real value immediately on load rather than waiting for the first
+    heartbeat to arrive.
+    """
+    return _respond("volume_get", win.get_volume(), request, device_id)
+
+
 class WifiBody(BaseModel):
     enable: bool | None = Field(
         default=None,

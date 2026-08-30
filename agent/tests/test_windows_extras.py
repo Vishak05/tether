@@ -4,7 +4,22 @@ actually restart/shut down the test machine or change its brightness."""
 import ctypes
 from unittest import mock
 
+import pytest
+
 from agent.os_layer import windows as win
+
+
+@pytest.fixture(autouse=True)
+def _reset_com_caches():
+    """
+    windows.py caches its WMI connection and pycaw endpoint in module globals —
+    they're far too expensive to rebuild on every status heartbeat. That cache
+    would otherwise carry one test's mock into the next, so clear it around
+    each test.
+    """
+    win._invalidate_com_caches()
+    yield
+    win._invalidate_com_caches()
 
 
 # ── restart / shutdown ──────────────────────────────────────────────────────
@@ -77,6 +92,46 @@ def test_set_brightness_clamps_and_calls_wmi_method():
         result = win.set_brightness(150)  # over 100, should clamp
     assert result == {"ok": True, "result": {"brightness": 100}}
     fake_method.WmiSetBrightness.assert_called_once_with(Timeout=1, Brightness=100)
+
+
+# ── volume ────────────────────────────────────────────────────────────────────
+
+def test_get_volume_converts_scalar_to_percent():
+    iface = mock.Mock()
+    iface.GetMasterVolumeLevelScalar.return_value = 0.37  # pycaw reports 0.0–1.0
+    with mock.patch.object(win, "_get_volume_iface", return_value=iface):
+        result = win.get_volume()
+    assert result == {"ok": True, "result": {"volume": 37}}
+
+
+def test_get_volume_drops_cached_handle_on_failure():
+    """A dead endpoint (default audio device switched away) must not stick —
+    the cached COM pointer is cleared so the next call rebuilds it."""
+    with mock.patch.object(win, "_get_volume_iface", side_effect=OSError("device gone")), \
+         mock.patch.object(win, "_invalidate_com_caches") as invalidate:
+        result = win.get_volume()
+    assert result["ok"] is False
+    invalidate.assert_called_once()
+
+
+def test_get_status_includes_volume_and_brightness():
+    """The phone's controls read these off the heartbeat; without them the UI
+    has nothing to display and falls back to inventing a value."""
+    with mock.patch.object(win, "get_volume", return_value=win._ok({"volume": 63})), \
+         mock.patch.object(win, "get_brightness", return_value=win._ok({"brightness": 22})):
+        payload = win.get_status()["result"]
+    assert payload["volume"] == 63
+    assert payload["brightness"] == 22
+
+
+def test_get_status_reports_none_when_level_unavailable():
+    """No audio endpoint / no brightness-capable display — report null rather
+    than a placeholder, so the UI disables the control instead of guessing."""
+    with mock.patch.object(win, "get_volume", return_value=win._err("no endpoint")), \
+         mock.patch.object(win, "get_brightness", return_value=win._err("no display")):
+        payload = win.get_status()["result"]
+    assert payload["volume"] is None
+    assert payload["brightness"] is None
 
 
 # ── idle time ────────────────────────────────────────────────────────────────
