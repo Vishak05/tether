@@ -126,6 +126,45 @@ export interface StatusResponse {
   state: LaptopState | null;
 }
 
+// ── Proximity auto-lock (agent-side) ────────────────────────────────────────
+// Mirrors agent/routes/proximity.py. Detection runs on the laptop, so these
+// are configuration and observation only — the feature keeps working with
+// this app closed.
+
+export interface ProximityState {
+  enabled: boolean;
+  target_mac: string | null;
+  target_name: string | null;
+  poll_interval_secs: number;
+  miss_threshold: number;
+  /** null until the agent's first probe completes */
+  present: boolean | null;
+  armed: boolean;
+  consecutive_misses: number;
+  last_probe_at: string | null;
+  last_detail: string | null;
+  last_lock_at: string | null;
+  last_error: string | null;
+  running: boolean;
+}
+
+export interface UpdateProximityBody {
+  enabled?: boolean;
+  target_mac?: string;
+  target_name?: string;
+  poll_interval_secs?: number;
+  miss_threshold?: number;
+}
+
+export interface BondedDevice {
+  mac: string;
+  name: string;
+}
+
+export interface BondedListResponse {
+  devices: BondedDevice[];
+}
+
 export interface ApiErrorBody {
   detail: string | { loc: (string | number)[]; msg: string; type: string }[];
 }

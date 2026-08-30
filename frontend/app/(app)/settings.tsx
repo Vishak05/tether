@@ -1,76 +1,62 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { revokeSelf } from '../../src/api/auth';
 import { getApiErrorMessage } from '../../src/api/errors';
+import { fetchBondedDevices, fetchProximity, updateProximity } from '../../src/api/proximity';
 import { useAuth } from '../../src/auth/AuthContext';
-import {
-  clearAutoLockAnchor,
-  getAutoLockAnchor,
-  getAutoLockEnabled,
-  setAutoLockAnchor,
-  setAutoLockEnabled,
-  type AutoLockAnchor,
-} from '../../src/auth/secureStore';
-import { requestBlePermissions, scanForNearbyDevices, type NearbyDevice } from '../../src/ble/manager';
+import type { BondedDevice } from '../../src/types/api';
 
 export default function SettingsScreen() {
   const { baseUrl, logout } = useAuth();
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [bonded, setBonded] = useState<BondedDevice[] | null>(null);
 
-  const [autoLockEnabled, setAutoLockEnabledState] = useState(false);
-  const [anchor, setAnchor] = useState<AutoLockAnchor | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const [scanResults, setScanResults] = useState<NearbyDevice[] | null>(null);
+  // Polled rather than fetched once: `present` and `consecutive_misses` are
+  // live state from the laptop's probe loop, so the screen should track them
+  // while it's open.
+  const proximity = useQuery({
+    queryKey: ['proximity'],
+    queryFn: fetchProximity,
+    refetchInterval: 10_000,
+  });
 
-  useEffect(() => {
-    (async () => {
-      const [enabled, storedAnchor] = await Promise.all([getAutoLockEnabled(), getAutoLockAnchor()]);
-      setAutoLockEnabledState(enabled);
-      setAnchor(storedAnchor);
-    })();
-  }, []);
+  const mutation = useMutation({
+    mutationFn: updateProximity,
+    onSuccess: (data) => queryClient.setQueryData(['proximity'], data),
+    onError: (err) => Alert.alert("Couldn't update auto-lock", getApiErrorMessage(err)),
+  });
 
-  const handleToggle = async (value: boolean) => {
-    if (value && !anchor) {
-      Alert.alert('Pick a device first', 'Scan for and select a nearby Bluetooth device to use as the presence anchor before enabling.');
+  const state = proximity.data;
+
+  const handleToggle = (value: boolean) => {
+    if (value && !state?.target_mac) {
+      Alert.alert('Pick a device first', 'Choose which Bluetooth device the laptop should watch for before turning this on.');
       return;
     }
-    setAutoLockEnabledState(value);
-    await setAutoLockEnabled(value);
+    mutation.mutate({ enabled: value });
   };
 
-  const handleScan = async () => {
-    const granted = await requestBlePermissions();
-    if (!granted) {
-      Alert.alert('Bluetooth permission needed', 'Tether needs Bluetooth permission to scan for nearby devices.');
-      return;
-    }
-    setScanning(true);
-    setScanResults(null);
+  const handleOpenPicker = async () => {
+    setPicking(true);
+    setBonded(null);
     try {
-      const results = await scanForNearbyDevices();
-      setScanResults(results);
+      const { devices } = await fetchBondedDevices();
+      setBonded(devices);
     } catch (err) {
-      Alert.alert('Scan failed', getApiErrorMessage(err));
+      Alert.alert("Couldn't list devices", getApiErrorMessage(err));
     } finally {
-      setScanning(false);
+      setPicking(false);
     }
   };
 
-  const handlePickAnchor = async (device: NearbyDevice) => {
-    const picked = { id: device.id, name: device.name };
-    await setAutoLockAnchor(picked);
-    setAnchor(picked);
-    setScanResults(null);
-  };
-
-  const handleClearAnchor = async () => {
-    await clearAutoLockAnchor();
-    await setAutoLockEnabled(false);
-    setAnchor(null);
-    setAutoLockEnabledState(false);
+  const handlePick = (device: BondedDevice) => {
+    setBonded(null);
+    mutation.mutate({ target_mac: device.mac, target_name: device.name });
   };
 
   const handleLogout = async () => {
@@ -88,8 +74,19 @@ export default function SettingsScreen() {
     }
   };
 
+  const statusLine = (() => {
+    if (!state) return 'Loading…';
+    if (!state.enabled) return 'Off';
+    if (state.last_error) return `Can't check right now — ${state.last_error}`;
+    if (state.present === null) return 'Waiting for the first check…';
+    if (state.present) return 'Phone detected nearby';
+    return `Phone not detected (${state.consecutive_misses} of ${state.miss_threshold})`;
+  })();
+
+  const lockDelaySecs = state ? state.poll_interval_secs * state.miss_threshold : 0;
+
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.section}>
         <Text style={styles.label}>Laptop address</Text>
         <Text style={styles.value}>{baseUrl}</Text>
@@ -102,36 +99,52 @@ export default function SettingsScreen() {
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Proximity Auto-Lock</Text>
-            <Text style={styles.hint}>Locks the laptop when your chosen device is no longer nearby. Only works while this app is open.</Text>
+            <Text style={styles.hint}>
+              Your laptop watches for your phone over Bluetooth and locks itself when it goes
+              out of range. Runs on the laptop — works with this app closed.
+            </Text>
           </View>
-          <Switch value={autoLockEnabled} onValueChange={handleToggle} />
+          <Switch
+            value={state?.enabled ?? false}
+            onValueChange={handleToggle}
+            disabled={!state || mutation.isPending}
+          />
         </View>
 
-        <Text style={styles.value}>{anchor ? anchor.name : 'No device selected'}</Text>
+        <Text style={styles.value}>{state?.target_name ?? state?.target_mac ?? 'No device selected'}</Text>
+        <Text style={styles.hint}>{statusLine}</Text>
+        {state?.enabled ? (
+          <Text style={styles.hint}>Locks after about {lockDelaySecs}s out of range.</Text>
+        ) : null}
+        {state && !state.running ? (
+          <Text style={[styles.hint, styles.dangerText]}>
+            The laptop&apos;s auto-lock service isn&apos;t running.
+          </Text>
+        ) : null}
 
         <View style={styles.buttonRow}>
-          <Pressable style={styles.linkButton} onPress={handleScan} disabled={scanning}>
-            <Text style={styles.linkText}>{scanning ? 'Scanning…' : 'Scan for nearby devices'}</Text>
+          <Pressable style={styles.linkButton} onPress={handleOpenPicker} disabled={picking}>
+            <Text style={styles.linkText}>{picking ? 'Loading…' : 'Choose device'}</Text>
           </Pressable>
-          {anchor ? (
-            <Pressable style={styles.linkButton} onPress={handleClearAnchor}>
-              <Text style={[styles.linkText, styles.dangerText]}>Clear</Text>
-            </Pressable>
-          ) : null}
         </View>
 
-        {scanning ? <ActivityIndicator style={{ marginTop: 8 }} /> : null}
+        {picking ? <ActivityIndicator style={{ marginTop: 8 }} /> : null}
 
-        {scanResults ? (
+        {bonded ? (
           <FlatList
             style={styles.scanList}
-            data={scanResults}
-            keyExtractor={(item) => item.id}
-            ListEmptyComponent={<Text style={styles.hint}>No devices found — try again closer to the device.</Text>}
+            data={bonded}
+            keyExtractor={(item) => item.mac}
+            ListEmptyComponent={
+              <Text style={styles.hint}>
+                No paired devices found. Pair your phone with this laptop in Windows Bluetooth
+                settings first.
+              </Text>
+            }
             renderItem={({ item }) => (
-              <Pressable style={styles.scanRow} onPress={() => handlePickAnchor(item)}>
+              <Pressable style={styles.scanRow} onPress={() => handlePick(item)}>
                 <Text style={styles.scanName} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.hint}>{item.rssi != null ? `${item.rssi} dBm` : ''}</Text>
+                <Text style={styles.hint}>{item.mac}</Text>
               </Pressable>
             )}
           />
@@ -141,12 +154,12 @@ export default function SettingsScreen() {
       <Pressable style={styles.logoutButton} onPress={handleLogout} disabled={busy}>
         <Text style={styles.logoutText}>{busy ? 'Logging out…' : 'Log out'}</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 24 },
+  container: { flexGrow: 1, padding: 16, gap: 24 },
   section: { backgroundColor: '#f3f4f6', borderRadius: 10, padding: 16, gap: 6 },
   label: { fontSize: 13, color: '#666', textTransform: 'uppercase' },
   value: { fontSize: 16, fontWeight: '600' },

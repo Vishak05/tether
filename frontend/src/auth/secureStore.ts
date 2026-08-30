@@ -6,9 +6,6 @@ const KEYS = {
   accessToken: 'tether.access_token',
   refreshToken: 'tether.refresh_token',
   deviceId: 'tether.device_id',
-  autoLockEnabled: 'tether.auto_lock_enabled',
-  autoLockAnchorId: 'tether.auto_lock_anchor_id',
-  autoLockAnchorName: 'tether.auto_lock_anchor_name',
   downloadsDirectoryUri: 'tether.downloads_directory_uri',
 } as const;
 
@@ -56,43 +53,9 @@ export async function clearSession(): Promise<void> {
   ]);
 }
 
-// ── Proximity auto-lock ─────────────────────────────────────────────────────
-
-export interface AutoLockAnchor {
-  id: string;
-  name: string;
-}
-
-export async function getAutoLockEnabled(): Promise<boolean> {
-  return (await SecureStore.getItemAsync(KEYS.autoLockEnabled)) === 'true';
-}
-
-export async function setAutoLockEnabled(enabled: boolean): Promise<void> {
-  await SecureStore.setItemAsync(KEYS.autoLockEnabled, enabled ? 'true' : 'false');
-}
-
-export async function getAutoLockAnchor(): Promise<AutoLockAnchor | null> {
-  const [id, name] = await Promise.all([
-    SecureStore.getItemAsync(KEYS.autoLockAnchorId),
-    SecureStore.getItemAsync(KEYS.autoLockAnchorName),
-  ]);
-  if (!id) return null;
-  return { id, name: name || id };
-}
-
-export async function setAutoLockAnchor(anchor: AutoLockAnchor): Promise<void> {
-  await Promise.all([
-    SecureStore.setItemAsync(KEYS.autoLockAnchorId, anchor.id),
-    SecureStore.setItemAsync(KEYS.autoLockAnchorName, anchor.name),
-  ]);
-}
-
-export async function clearAutoLockAnchor(): Promise<void> {
-  await Promise.all([
-    SecureStore.deleteItemAsync(KEYS.autoLockAnchorId),
-    SecureStore.deleteItemAsync(KEYS.autoLockAnchorName),
-  ]);
-}
+// Proximity auto-lock settings used to live here. They now live on the laptop
+// (GET/PATCH /proximity) because the agent is what enforces them — keeping a
+// second copy on the phone would just be a cache that drifts.
 
 // ── Downloads folder (Android Storage Access Framework) ────────────────────
 

@@ -23,15 +23,7 @@
           }
         }
       ],
-      "expo-sharing",
-      [
-        "react-native-ble-plx",
-        {
-          "isBackgroundEnabled": false,
-          "neverForLocation": true,
-          "bluetoothAlwaysPermission": "Tether uses Bluetooth to detect when your paired device is nearby, to auto-lock your laptop when it's not."
-        }
-      ]
+      "expo-sharing"
     ],
     "ios": {
       "supportsTablet": true,
