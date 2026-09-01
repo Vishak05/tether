@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import { setVolume } from '../api/commands';
 import { getApiErrorMessage } from '../api/errors';
 import { useOptimisticLevel } from '../hooks/useOptimisticLevel';
-import { Stepper } from './ui/Stepper';
+import { Slider } from './ui/Slider';
 
 interface Props {
   /** Laptop's current volume from the live status heartbeat; null = not yet known or unavailable. */
@@ -34,5 +34,5 @@ export function VolumeControl({ level: serverLevel }: Props) {
     }
   };
 
-  return <Stepper label="Volume" level={level} onStep={apply} disabled={busy} />;
+  return <Slider label="Volume" level={level} onCommit={apply} disabled={busy} />;
 }

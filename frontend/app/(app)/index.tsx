@@ -9,6 +9,7 @@ import { ScreenshotViewer } from '../../src/components/ScreenshotViewer';
 import { StatusCard } from '../../src/components/StatusCard';
 import { VolumeControl } from '../../src/components/VolumeControl';
 import { Card, Divider } from '../../src/components/ui/Card';
+import { Disclosure } from '../../src/components/ui/Disclosure';
 import { Screen } from '../../src/components/ui/Screen';
 import { TetherRail } from '../../src/components/ui/TetherRail';
 import { useLiveStatus } from '../../src/hooks/useLiveStatus';
@@ -30,6 +31,15 @@ function confirmThen(title: string, message: string, action: () => Promise<unkno
     });
 }
 
+/**
+ * The control panel.
+ *
+ * Ordered by how often you reach for something, not by category tidiness:
+ * Lock is the most-used action in the app and has to be reachable without
+ * scrolling. Everything that isn't reached for constantly is either folded
+ * (restart/shutdown, status details) or pooled into one card, because each
+ * additional card costs ~50dp of padding and label before it shows anything.
+ */
 export default function DashboardScreen() {
   const { baseUrl } = useAuth();
   const { status, isLoading, isError, connected } = useLiveStatus();
@@ -39,8 +49,7 @@ export default function DashboardScreen() {
       <StatusCard status={status} isLoading={isLoading} isError={isError} connected={connected} />
 
       {/* Controls hang off the tether rail, which is tinted while the socket
-          is live. Grouping them into labelled cards replaces what used to be
-          one undifferentiated column of buttons. */}
+          is live. */}
       <TetherRail connected={!!connected}>
         <Card label="Power">
           <View style={styles.pair}>
@@ -51,23 +60,27 @@ export default function DashboardScreen() {
               <CommandButton label="Sleep" onPress={sleep} />
             </View>
           </View>
-          <Divider />
-          <View style={styles.pair}>
-            <View style={styles.half}>
-              <CommandButton
-                label="Restart"
-                variant="danger"
-                onPress={confirmThen('Restart', 'Restart the laptop now? Any unsaved work will be lost.', restart)}
-              />
+
+          {/* Folded: rarely used, and the extra tap is a feature in front of
+              powering off a machine you aren't sitting at. */}
+          <Disclosure label="Restart / shut down">
+            <View style={styles.pair}>
+              <View style={styles.half}>
+                <CommandButton
+                  label="Restart"
+                  variant="danger"
+                  onPress={confirmThen('Restart', 'Restart the laptop now? Any unsaved work will be lost.', restart)}
+                />
+              </View>
+              <View style={styles.half}>
+                <CommandButton
+                  label="Shut Down"
+                  variant="danger"
+                  onPress={confirmThen('Shut Down', "Shut down the laptop now? You'll need physical access to turn it back on.", shutdown)}
+                />
+              </View>
             </View>
-            <View style={styles.half}>
-              <CommandButton
-                label="Shut Down"
-                variant="danger"
-                onPress={confirmThen('Shut Down', "Shut down the laptop now? You'll need physical access to turn it back on.", shutdown)}
-              />
-            </View>
-          </View>
+          </Disclosure>
         </Card>
 
         {/* Both are driven by the live status heartbeat rather than their own
@@ -84,15 +97,13 @@ export default function DashboardScreen() {
           />
         </Card>
 
-        <Card label="Media">
+        {/* Media, Wi-Fi and screenshot were three separate cards. They have
+            nothing in common beyond being occasional, and three cards' worth
+            of chrome to say so wasn't worth ~150dp. */}
+        <Card label="More">
           <MediaControls />
-        </Card>
-
-        <Card label="Network">
+          <Divider />
           <CommandButton label="Toggle Wi-Fi" onPress={() => toggleWifi(null)} />
-        </Card>
-
-        <Card label="Screen">
           <ScreenshotViewer />
         </Card>
       </TetherRail>

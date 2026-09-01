@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import { setBrightness } from '../api/commands';
 import { getApiErrorMessage } from '../api/errors';
 import { useOptimisticLevel } from '../hooks/useOptimisticLevel';
-import { Stepper } from './ui/Stepper';
+import { Slider } from './ui/Slider';
 
 interface Props {
   /** Laptop's current brightness from the live status heartbeat; null = not yet known or unavailable. */
@@ -41,5 +41,5 @@ export function BrightnessControl({ level: serverLevel, statusLoaded }: Props) {
     }
   };
 
-  return <Stepper label="Brightness" level={level} onStep={apply} disabled={busy} />;
+  return <Slider label="Brightness" level={level} onCommit={apply} disabled={busy} />;
 }

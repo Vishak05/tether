@@ -4,6 +4,7 @@ import { color, radius, space, type } from '../theme';
 import type { StatusResponse } from '../types/api';
 import { Badge } from './ui/Badge';
 import { Card } from './ui/Card';
+import { Disclosure } from './ui/Disclosure';
 
 interface StatusCardProps {
   status?: StatusResponse;
@@ -93,29 +94,34 @@ export function StatusCard({ status, isLoading, isError, connected }: StatusCard
         <Text style={styles.muted}>No battery reported</Text>
       )}
 
-      {activeWindow ? (
-        <View style={styles.metaRow}>
-          <Text style={styles.metaKey}>Active</Text>
-          <Text style={styles.metaValue} numberOfLines={1}>
-            {activeWindow.title || activeWindow.process}
-          </Text>
-        </View>
-      ) : null}
+      {/* Folded by default. Name, link state and battery answer "can I reach
+          it and is it about to die"; the rest is diagnostics you go looking
+          for, and it was costing ~140dp above the first control. */}
+      <Disclosure label="Details">
+        {activeWindow ? (
+          <View style={styles.metaRow}>
+            <Text style={styles.metaKey}>Active</Text>
+            <Text style={styles.metaValue} numberOfLines={1}>
+              {activeWindow.title || activeWindow.process}
+            </Text>
+          </View>
+        ) : null}
 
-      {idleSecs != null ? (
-        <View style={styles.metaRow}>
-          <Text style={styles.metaKey}>Idle</Text>
-          <Text style={styles.metaValue}>{idleLabel(idleSecs)}</Text>
-        </View>
-      ) : null}
+        {idleSecs != null ? (
+          <View style={styles.metaRow}>
+            <Text style={styles.metaKey}>Idle</Text>
+            <Text style={styles.metaValue}>{idleLabel(idleSecs)}</Text>
+          </View>
+        ) : null}
 
-      {system ? (
-        <View style={styles.statsRow}>
-          <Stat value={system.cpu_percent} label="CPU" />
-          <Stat value={system.memory_percent} label="RAM" />
-          <Stat value={system.disk_percent} label="Disk" />
-        </View>
-      ) : null}
+        {system ? (
+          <View style={styles.statsRow}>
+            <Stat value={system.cpu_percent} label="CPU" />
+            <Stat value={system.memory_percent} label="RAM" />
+            <Stat value={system.disk_percent} label="Disk" />
+          </View>
+        ) : null}
+      </Disclosure>
     </Card>
   );
 }
