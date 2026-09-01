@@ -58,7 +58,13 @@ export function StatusCard({ status, isLoading, isError, connected }: StatusCard
             tone={connected ? 'live' : 'idle'}
             pulse={connected}
           />
-          <Badge label={state?.locked ? 'Locked' : 'Open'} tone={state?.locked ? 'warn' : 'idle'} />
+          {/* "Unlocked", not "Open" — the shorter word reads as the lid, or a
+              session, or anything else. It's the pair to "Locked" or it's
+              nothing. */}
+          <Badge
+            label={state?.locked ? 'Locked' : 'Unlocked'}
+            tone={state?.locked ? 'warn' : 'idle'}
+          />
         </View>
       </View>
 

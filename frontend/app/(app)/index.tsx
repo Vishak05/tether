@@ -34,15 +34,33 @@ function confirmThen(title: string, message: string, action: () => Promise<unkno
 /**
  * The control panel.
  *
- * Ordered by how often you reach for something, not by category tidiness:
- * Lock is the most-used action in the app and has to be reachable without
- * scrolling. Everything that isn't reached for constantly is either folded
- * (restart/shutdown, status details) or pooled into one card, because each
- * additional card costs ~50dp of padding and label before it shows anything.
+ * Cards are grouped by the part of the machine they touch, and ordered by how
+ * often you reach for them. Those are two different jobs: an earlier pass
+ * grouped by frequency too, which collected the leftovers into a card that
+ * could only honestly be called "More". Grouping by subject gives every
+ * action a home — sound controls sit with sound, screen controls with screen.
+ *
+ * Rarely-used things are folded rather than cut: restart/shutdown behind a
+ * disclosure, status details behind another. Each additional card costs ~50dp
+ * of padding and label before showing anything, so cards are spent carefully.
  */
 export default function DashboardScreen() {
   const { baseUrl } = useAuth();
   const { status, isLoading, isError, connected } = useLiveStatus();
+
+  // Both are driven by the live status heartbeat rather than local state, so
+  // they show the laptop's real levels and keep tracking them. Threaded from
+  // here because useLiveStatus opens a WebSocket per call — calling it inside
+  // each control would open duplicate connections.
+  const volume = status?.state?.volume ?? null;
+  const brightness = status?.state?.brightness ?? null;
+  const statusLoaded = status?.state != null;
+
+  // Mirrors BrightnessControl's own hide rule (it renders null when the
+  // laptop has no brightness-capable display). Repeated out here because the
+  // divider between it and the screenshot button lives at this level and
+  // would otherwise be left leading the card with nothing above it.
+  const showBrightness = !statusLoaded || brightness != null;
 
   return (
     <Screen title="Tether" subtitle={baseUrl ?? undefined}>
@@ -51,7 +69,7 @@ export default function DashboardScreen() {
       {/* Controls hang off the tether rail, which is tinted while the socket
           is live. */}
       <TetherRail connected={!!connected}>
-        <Card label="Power">
+        <Card label="System">
           <View style={styles.pair}>
             <View style={styles.half}>
               <CommandButton label="Lock" onPress={lock} />
@@ -60,6 +78,8 @@ export default function DashboardScreen() {
               <CommandButton label="Sleep" onPress={sleep} />
             </View>
           </View>
+
+          <CommandButton label="Toggle Wi-Fi" onPress={() => toggleWifi(null)} />
 
           {/* Folded: rarely used, and the extra tap is a feature in front of
               powering off a machine you aren't sitting at. */}
@@ -83,27 +103,19 @@ export default function DashboardScreen() {
           </Disclosure>
         </Card>
 
-        {/* Both are driven by the live status heartbeat rather than their own
-            local state, so they show the laptop's real levels and keep
-            tracking them. The values are threaded through from here because
-            useLiveStatus opens a WebSocket per call — calling it inside each
-            control would open duplicate connections. */}
-        <Card label="Levels">
-          <VolumeControl level={status?.state?.volume ?? null} />
+        <Card label="Sound">
+          <VolumeControl level={volume} />
           <Divider />
-          <BrightnessControl
-            level={status?.state?.brightness ?? null}
-            statusLoaded={status?.state != null}
-          />
+          <MediaControls />
         </Card>
 
-        {/* Media, Wi-Fi and screenshot were three separate cards. They have
-            nothing in common beyond being occasional, and three cards' worth
-            of chrome to say so wasn't worth ~150dp. */}
-        <Card label="More">
-          <MediaControls />
-          <Divider />
-          <CommandButton label="Toggle Wi-Fi" onPress={() => toggleWifi(null)} />
+        <Card label="Display">
+          {showBrightness ? (
+            <>
+              <BrightnessControl level={brightness} statusLoaded={statusLoaded} />
+              <Divider />
+            </>
+          ) : null}
           <ScreenshotViewer />
         </Card>
       </TetherRail>
