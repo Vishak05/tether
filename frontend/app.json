@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "scheme": "tether",
     "plugins": [
       "expo-router",
@@ -32,7 +32,7 @@
     "android": {
       "package": "com.vishak.tether",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#14100E",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -52,6 +52,7 @@
       "eas": {
         "projectId": "8ff2fc1a-e173-4ce8-a68f-f6066da6ebc7"
       }
-    }
+    },
+    "backgroundColor": "#14100E"
   }
 }

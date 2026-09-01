@@ -1,6 +1,7 @@
 import { Redirect, Tabs } from 'expo-router';
 
 import { useAuth } from '../../src/auth/AuthContext';
+import { color, space, type } from '../../src/theme';
 
 export default function AppLayout() {
   const { session } = useAuth();
@@ -15,7 +16,27 @@ export default function AppLayout() {
   if (!session) return <Redirect href="/(auth)/pair" />;
 
   return (
-    <Tabs screenOptions={{ headerTitleAlign: 'center' }}>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: color.signal,
+        tabBarInactiveTintColor: color.textMuted,
+        // No icon set is installed (@expo/vector-icons is a native dependency
+        // and would force a rebuild), so the bar is typographic: wide-tracked
+        // uppercase labels, which suits the instrument register anyway.
+        tabBarIconStyle: { display: 'none' },
+        tabBarLabelStyle: { ...type.label, fontSize: 11 },
+        tabBarStyle: {
+          backgroundColor: color.surface,
+          borderTopColor: color.line,
+          borderTopWidth: 1,
+          paddingTop: space.sm,
+          height: 64,
+        },
+        tabBarItemStyle: { paddingVertical: space.xs },
+        sceneStyle: { backgroundColor: color.bg },
+      }}
+    >
       <Tabs.Screen name="index" options={{ title: 'Dashboard' }} />
       <Tabs.Screen name="files" options={{ title: 'Files' }} />
       <Tabs.Screen name="devices" options={{ title: 'Devices' }} />
