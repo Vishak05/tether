@@ -13,6 +13,7 @@ routes/commands.py selects the right layer at import time.
 """
 import base64
 import ctypes
+from ctypes import wintypes
 import io
 import os
 import subprocess
@@ -416,21 +417,49 @@ def get_status() -> dict:
     return _ok(payload)
 
 
+DESKTOP_READOBJECTS = 0x0001
+
+
 def _is_locked() -> bool:
     """
-    Heuristic: try to open the interactive desktop. Returns True if locked.
-    This is not 100% reliable but is good enough for a status dashboard.
+    True when the workstation is locked.
+
+    Asks which desktop currently owns *input*, not whether a desktop exists.
+
+    The previous implementation called OpenDesktopW("Default"), which could
+    never report a locked machine: locking doesn't destroy the Default
+    desktop, it switches the input desktop to Winlogon. Default remains
+    present and openable by name in both states, so the call succeeded either
+    way and the status always read "unlocked". (It also passed 0x0100 as
+    DESKTOP_READOBJECTS, which is really DESKTOP_SWITCHDESKTOP.) Confirmed by
+    sampling both calls a second apart across a real lock: OpenDesktopW said
+    unlocked at the same instant OpenInputDesktop said locked.
+
+    OpenInputDesktop opens whichever desktop is receiving input. While locked
+    that's Winlogon, which a normal user process has no rights to, so the call
+    fails — and the failure is the signal.
+
+    Note this depends on running inside the user's interactive session, which
+    the Task Scheduler entry guarantees (LogonType Interactive). A service
+    running as SYSTEM would get a different answer.
     """
     try:
-        # OpenDesktop returns NULL when the user is at the lock screen
-        hdesk = ctypes.windll.user32.OpenDesktopW(
-            "Default", 0, False, 0x0100  # DESKTOP_READOBJECTS
-        )
-        if hdesk == 0:
+        user32 = ctypes.windll.user32
+        # Declare the return type: HDESK is pointer-sized, and ctypes defaults
+        # to a 32-bit int, which would truncate the handle on 64-bit Windows.
+        user32.OpenInputDesktop.restype = ctypes.c_void_p
+        user32.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        user32.CloseDesktop.argtypes = [ctypes.c_void_p]
+
+        hdesk = user32.OpenInputDesktop(0, False, DESKTOP_READOBJECTS)
+        if not hdesk:
             return True
-        ctypes.windll.user32.CloseDesktop(hdesk)
+        user32.CloseDesktop(hdesk)
         return False
     except Exception:
+        # Never claim "locked" because the probe itself broke — the dashboard
+        # showing a wrong state is better than the proximity service treating
+        # an API error as "already locked" and skipping a lock it should do.
         return False
 
 

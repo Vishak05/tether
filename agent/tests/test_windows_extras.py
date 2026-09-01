@@ -134,6 +134,35 @@ def test_get_status_reports_none_when_level_unavailable():
     assert payload["brightness"] is None
 
 
+# ── lock state ────────────────────────────────────────────────────────────────
+
+def test_is_locked_true_when_input_desktop_cannot_be_opened():
+    """
+    A locked session hands the input desktop to Winlogon, which a normal user
+    process may not open — the failure IS the signal.
+    """
+    with mock.patch.object(win.ctypes.windll.user32, "OpenInputDesktop", return_value=0):
+        assert win._is_locked() is True
+
+
+def test_is_locked_false_when_input_desktop_opens_and_handle_is_closed():
+    handle = 0x1234
+    with mock.patch.object(win.ctypes.windll.user32, "OpenInputDesktop", return_value=handle), \
+         mock.patch.object(win.ctypes.windll.user32, "CloseDesktop") as close:
+        assert win._is_locked() is False
+    close.assert_called_once_with(handle)
+
+
+def test_is_locked_reports_unlocked_when_the_probe_itself_errors():
+    """
+    Never claim "locked" because the API broke: the proximity service skips
+    locking when it believes the machine is already locked, so a failure that
+    reported True would silently suppress the lock it should perform.
+    """
+    with mock.patch.object(win.ctypes.windll.user32, "OpenInputDesktop", side_effect=OSError("boom")):
+        assert win._is_locked() is False
+
+
 # ── idle time ────────────────────────────────────────────────────────────────
 
 def test_get_idle_seconds_computes_from_tick_counts():
