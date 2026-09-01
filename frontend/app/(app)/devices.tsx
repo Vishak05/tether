@@ -1,9 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { listDevices, revokeDevice } from '../../src/api/devices';
 import { getApiErrorMessage } from '../../src/api/errors';
+import { Button } from '../../src/components/ui/Button';
+import { Card } from '../../src/components/ui/Card';
+import { Screen } from '../../src/components/ui/Screen';
+import { color, space, type } from '../../src/theme';
 import type { Device } from '../../src/types/api';
 
 export default function DevicesScreen() {
@@ -35,50 +39,76 @@ export default function DevicesScreen() {
     ]);
   };
 
+  const count = data?.devices.length ?? 0;
+
   return (
-    <FlatList
-      contentContainerStyle={styles.container}
-      data={data?.devices ?? []}
-      keyExtractor={(item) => item.id}
-      onRefresh={refetch}
-      refreshing={isRefetching}
-      ListEmptyComponent={
-        <Text style={styles.muted}>
-          {isLoading ? 'Loading…' : isError ? "Couldn't load devices" : 'No paired devices'}
-        </Text>
-      }
-      renderItem={({ item }) => (
-        <View style={styles.row}>
-          <View style={styles.info}>
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.muted}>Last seen {new Date(item.last_seen).toLocaleString()}</Text>
-          </View>
-          <Pressable
-            style={styles.revokeButton}
-            disabled={revokingId === item.id}
-            onPress={() => handleRevoke(item)}
-          >
-            <Text style={styles.revokeText}>Revoke</Text>
-          </Pressable>
-        </View>
-      )}
-    />
+    <Screen
+      title="Devices"
+      subtitle={count ? `${count} paired` : undefined}
+      scroll={false}
+    >
+      <FlatList
+        data={data?.devices ?? []}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor={color.signal}
+            colors={[color.signal]}
+            progressBackgroundColor={color.surface}
+          />
+        }
+        ListEmptyComponent={
+          <Card>
+            <Text style={styles.empty}>
+              {isLoading
+                ? 'Loading…'
+                : isError
+                  ? "Couldn't load devices"
+                  : 'No phones paired yet'}
+            </Text>
+            {!isLoading && !isError ? (
+              <Text style={styles.emptyHint}>
+                Pair one from the laptop&apos;s pairing page to see it here.
+              </Text>
+            ) : null}
+          </Card>
+        }
+        renderItem={({ item }) => (
+          <Card>
+            <View style={styles.row}>
+              <View style={styles.info}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text style={styles.meta}>
+                  Last seen {new Date(item.last_seen).toLocaleString()}
+                </Text>
+              </View>
+              <Button
+                label="Revoke"
+                variant="danger"
+                compact
+                busy={revokingId === item.id}
+                onPress={() => handleRevoke(item)}
+              />
+            </View>
+          </Card>
+        )}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, gap: 12 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 10,
-    padding: 14,
-  },
-  info: { flex: 1, marginRight: 12 },
-  name: { fontSize: 16, fontWeight: '600' },
-  muted: { color: '#666', marginTop: 2 },
-  revokeButton: { backgroundColor: '#dc2626', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  revokeText: { color: '#fff', fontWeight: '600' },
+  list: { gap: space.sm, paddingBottom: space.lg },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  info: { flex: 1, gap: 2 },
+  name: type.title,
+  meta: type.caption,
+  empty: { ...type.body, color: color.textMuted },
+  emptyHint: type.caption,
 });

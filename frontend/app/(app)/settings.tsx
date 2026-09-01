@@ -1,12 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { revokeSelf } from '../../src/api/auth';
 import { getApiErrorMessage } from '../../src/api/errors';
 import { fetchBondedDevices, fetchProximity, updateProximity } from '../../src/api/proximity';
 import { useAuth } from '../../src/auth/AuthContext';
+import { Badge } from '../../src/components/ui/Badge';
+import { BottomSheet } from '../../src/components/ui/BottomSheet';
+import { Button } from '../../src/components/ui/Button';
+import { Card, Divider } from '../../src/components/ui/Card';
+import { Screen } from '../../src/components/ui/Screen';
+import { color, space, type } from '../../src/theme';
 import type { BondedDevice } from '../../src/types/api';
 import { proximityStatusLine } from '../../src/utils/proximityStatus';
 
@@ -15,6 +21,7 @@ export default function SettingsScreen() {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [bonded, setBonded] = useState<BondedDevice[] | null>(null);
 
   // Polled rather than fetched once: `present` and `consecutive_misses` are
@@ -43,12 +50,14 @@ export default function SettingsScreen() {
   };
 
   const handleOpenPicker = async () => {
+    setSheetOpen(true);
     setPicking(true);
     setBonded(null);
     try {
       const { devices } = await fetchBondedDevices();
       setBonded(devices);
     } catch (err) {
+      setSheetOpen(false);
       Alert.alert("Couldn't list devices", getApiErrorMessage(err));
     } finally {
       setPicking(false);
@@ -56,6 +65,7 @@ export default function SettingsScreen() {
   };
 
   const handlePick = (device: BondedDevice) => {
+    setSheetOpen(false);
     setBonded(null);
     mutation.mutate({ target_mac: device.mac, target_name: device.name });
   };
@@ -76,96 +86,119 @@ export default function SettingsScreen() {
   };
 
   const statusLine = proximityStatusLine(state);
-
   const lockDelaySecs = state ? state.poll_interval_secs * state.miss_threshold : 0;
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.section}>
-        <Text style={styles.label}>Laptop address</Text>
-        <Text style={styles.value}>{baseUrl}</Text>
-        <Pressable style={styles.linkButton} onPress={() => router.push('/(auth)/connect')}>
-          <Text style={styles.linkText}>Change address</Text>
-        </Pressable>
-      </View>
+  // Mirrors the status line's own logic: the countdown is only meaningful
+  // while armed, so the badge tracks the same three states it does.
+  const tone = !state?.enabled
+    ? 'idle'
+    : state?.last_error
+      ? 'danger'
+      : state?.present
+        ? 'live'
+        : 'warn';
 
-      <View style={styles.section}>
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Proximity Auto-Lock</Text>
+  return (
+    <Screen title="Settings">
+      <Card label="Connection">
+        <Text style={styles.value}>{baseUrl}</Text>
+        <Text style={styles.hint}>The address this phone reaches the agent on.</Text>
+        <Divider />
+        <Button
+          label="Change address"
+          variant="secondary"
+          onPress={() => router.push('/(auth)/connect')}
+        />
+      </Card>
+
+      <Card label="Proximity auto-lock" labelRight={state?.enabled ? 'On' : 'Off'}>
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleCopy}>
             <Text style={styles.hint}>
-              Your laptop watches for your phone over Bluetooth and locks itself when it goes
-              out of range. Runs on the laptop — works with this app closed.
+              Your laptop watches for your phone over Bluetooth and locks itself when it goes out
+              of range. Runs on the laptop — works with this app closed.
             </Text>
           </View>
           <Switch
             value={state?.enabled ?? false}
             onValueChange={handleToggle}
             disabled={!state || mutation.isPending}
+            trackColor={{ false: color.line, true: color.signalDeep }}
+            thumbColor={state?.enabled ? color.signal : color.textMuted}
           />
         </View>
 
-        <Text style={styles.value}>{state?.target_name ?? state?.target_mac ?? 'No device selected'}</Text>
-        <Text style={styles.hint}>{statusLine}</Text>
+        <Divider />
+
+        <View style={styles.statusRow}>
+          <View style={styles.statusCopy}>
+            <Text style={styles.label}>Watching for</Text>
+            <Text style={styles.value} numberOfLines={1}>
+              {state?.target_name ?? state?.target_mac ?? 'No device selected'}
+            </Text>
+          </View>
+          <Badge label={statusLine} tone={tone} pulse={tone === 'live'} />
+        </View>
+
         {state?.enabled ? (
           <Text style={styles.hint}>Locks after about {lockDelaySecs}s out of range.</Text>
         ) : null}
         {state && !state.running ? (
-          <Text style={[styles.hint, styles.dangerText]}>
-            The laptop&apos;s auto-lock service isn&apos;t running.
-          </Text>
+          <Text style={styles.warning}>The laptop&apos;s auto-lock service isn&apos;t running.</Text>
         ) : null}
 
-        <View style={styles.buttonRow}>
-          <Pressable style={styles.linkButton} onPress={handleOpenPicker} disabled={picking}>
-            <Text style={styles.linkText}>{picking ? 'Loading…' : 'Choose device'}</Text>
-          </Pressable>
-        </View>
+        <Button label="Choose device" variant="secondary" onPress={handleOpenPicker} />
+      </Card>
 
-        {picking ? <ActivityIndicator style={{ marginTop: 8 }} /> : null}
+      <Card label="Session">
+        <Button label={busy ? 'Logging out…' : 'Log out'} variant="danger" busy={busy} onPress={handleLogout} />
+      </Card>
 
-        {bonded ? (
+      <BottomSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} title="Paired devices">
+        {picking ? (
+          <ActivityIndicator style={styles.sheetLoading} color={color.signal} />
+        ) : (
           <FlatList
-            style={styles.scanList}
-            data={bonded}
+            data={bonded ?? []}
             keyExtractor={(item) => item.mac}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.sheetList}
             ListEmptyComponent={
               <Text style={styles.hint}>
                 No paired devices found. Pair your phone with this laptop in Windows Bluetooth
-                settings first.
+                settings first — that&apos;s separate from Tether&apos;s pairing code.
               </Text>
             }
+            ItemSeparatorComponent={Divider}
             renderItem={({ item }) => (
-              <Pressable style={styles.scanRow} onPress={() => handlePick(item)}>
-                <Text style={styles.scanName} numberOfLines={1}>{item.name}</Text>
+              <Pressable
+                style={({ pressed }) => [styles.sheetRow, pressed ? styles.sheetRowPressed : null]}
+                onPress={() => handlePick(item)}
+              >
+                <Text style={styles.value} numberOfLines={1}>
+                  {item.name}
+                </Text>
                 <Text style={styles.hint}>{item.mac}</Text>
               </Pressable>
             )}
           />
-        ) : null}
-      </View>
-
-      <Pressable style={styles.logoutButton} onPress={handleLogout} disabled={busy}>
-        <Text style={styles.logoutText}>{busy ? 'Logging out…' : 'Log out'}</Text>
-      </Pressable>
-    </ScrollView>
+        )}
+      </BottomSheet>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 16, gap: 24 },
-  section: { backgroundColor: '#f3f4f6', borderRadius: 10, padding: 16, gap: 6 },
-  label: { fontSize: 13, color: '#666', textTransform: 'uppercase' },
-  value: { fontSize: 16, fontWeight: '600' },
-  hint: { fontSize: 12, color: '#666', marginTop: 2 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  buttonRow: { flexDirection: 'row', gap: 16, marginTop: 8 },
-  linkButton: {},
-  linkText: { color: '#2563eb', fontWeight: '600' },
-  dangerText: { color: '#dc2626' },
-  scanList: { marginTop: 8, maxHeight: 180 },
-  scanRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  scanName: { fontSize: 14, fontWeight: '600' },
-  logoutButton: { backgroundColor: '#dc2626', borderRadius: 10, padding: 14, alignItems: 'center' },
-  logoutText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  label: type.label,
+  value: { ...type.body, color: color.text, fontWeight: '600' },
+  hint: type.caption,
+  warning: { ...type.caption, color: color.danger },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  toggleCopy: { flex: 1 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  statusCopy: { flex: 1, gap: space.xs },
+  sheetLoading: { paddingVertical: space.xl },
+  sheetList: { paddingVertical: space.sm },
+  sheetRow: { paddingVertical: space.md, paddingHorizontal: space.sm, borderRadius: 12, gap: 2 },
+  sheetRowPressed: { backgroundColor: color.surfaceRaised },
 });

@@ -11,6 +11,8 @@ interface ButtonProps {
   variant?: ButtonVariant;
   busy?: boolean;
   disabled?: boolean;
+  /** Tighter control for inline use inside a list row. */
+  compact?: boolean;
   style?: ViewStyle;
 }
 
@@ -55,6 +57,7 @@ export function Button({
   variant = 'primary',
   busy = false,
   disabled = false,
+  compact = false,
   style,
 }: ButtonProps) {
   const { scale, onPressIn, onPressOut } = usePressScale();
@@ -71,6 +74,7 @@ export function Button({
         disabled={inert}
         style={({ pressed }) => [
           styles.button,
+          compact ? styles.compact : null,
           FILL[variant],
           pressed && !inert ? PRESSED[variant] : null,
           disabled ? styles.disabled : null,
@@ -79,7 +83,10 @@ export function Button({
         {busy ? (
           <ActivityIndicator color={TEXT[variant]} />
         ) : (
-          <Text style={[styles.text, { color: TEXT[variant] }]} numberOfLines={1}>
+          <Text
+            style={[styles.text, compact ? styles.textCompact : null, { color: TEXT[variant] }]}
+            numberOfLines={1}
+          >
             {label}
           </Text>
         )}
@@ -99,6 +106,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  compact: { minHeight: HIT, paddingVertical: space.sm, paddingHorizontal: space.md },
   text: type.button,
+  textCompact: { fontSize: 14 },
   disabled: { opacity: 0.4 },
 });
