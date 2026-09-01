@@ -1,6 +1,9 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { color, radius, space, type } from '../theme';
 import type { StatusResponse } from '../types/api';
+import { Badge } from './ui/Badge';
+import { Card } from './ui/Card';
 
 interface StatusCardProps {
   status?: StatusResponse;
@@ -12,17 +15,20 @@ interface StatusCardProps {
 export function StatusCard({ status, isLoading, isError, connected }: StatusCardProps) {
   if (isLoading && !status) {
     return (
-      <View style={styles.card}>
-        <Text style={styles.muted}>Loading status…</Text>
-      </View>
+      <Card label="Machine">
+        <Text style={styles.muted}>Reading status…</Text>
+      </Card>
     );
   }
 
   if (isError || !status) {
     return (
-      <View style={styles.card}>
-        <Text style={styles.error}>Couldn't reach the laptop</Text>
-      </View>
+      <Card label="Machine" labelRight="No link">
+        <Text style={styles.error}>Can&apos;t reach the laptop</Text>
+        <Text style={styles.muted}>
+          Check the agent is running and the address in Settings is right.
+        </Text>
+      </Card>
     );
   }
 
@@ -40,74 +46,136 @@ export function StatusCard({ status, isLoading, isError, connected }: StatusCard
   };
 
   return (
-    <View style={styles.card}>
+    <Card label="Machine">
       <View style={styles.headerRow}>
-        <Text style={styles.laptopId}>{status.laptop_id}</Text>
+        <Text style={styles.laptopId} numberOfLines={1}>
+          {status.laptop_id}
+        </Text>
         <View style={styles.badgeGroup}>
-          <View style={[styles.badge, connected ? styles.badgeLive : styles.badgeStale]}>
-            <Text style={styles.badgeText}>{connected ? 'Live' : 'Reconnecting…'}</Text>
-          </View>
-          <View style={[styles.badge, state?.locked ? styles.badgeLocked : styles.badgeUnlocked]}>
-            <Text style={styles.badgeText}>{state?.locked ? 'Locked' : 'Unlocked'}</Text>
-          </View>
+          <Badge
+            label={connected ? 'Live' : 'Reconnecting'}
+            tone={connected ? 'live' : 'idle'}
+            pulse={connected}
+          />
+          <Badge label={state?.locked ? 'Locked' : 'Open'} tone={state?.locked ? 'warn' : 'idle'} />
         </View>
       </View>
-      <Text style={styles.muted}>{status.platform} · v{status.version}</Text>
 
+      <Text style={styles.platform}>
+        {status.platform} · v{status.version}
+      </Text>
+
+      {/* Battery reads as a meter rather than a number: charge level is a
+          proportion, and a bar shows it faster than digits do. */}
       {battery ? (
-        <Text style={styles.line}>
-          🔋 {battery.percent}% {battery.charging ? '(charging)' : ''}
-        </Text>
+        <View style={styles.batteryBlock}>
+          <View style={styles.batteryRow}>
+            <Text style={styles.batteryValue}>{battery.percent}%</Text>
+            <Text style={styles.muted}>{battery.charging ? 'Charging' : 'On battery'}</Text>
+          </View>
+          <View style={styles.track}>
+            <View
+              style={[
+                styles.fill,
+                {
+                  width: `${Math.max(0, Math.min(100, battery.percent))}%`,
+                  backgroundColor: battery.charging
+                    ? color.live
+                    : battery.percent <= 20
+                      ? color.danger
+                      : color.signal,
+                },
+              ]}
+            />
+          </View>
+        </View>
       ) : (
         <Text style={styles.muted}>No battery reported</Text>
       )}
 
       {activeWindow ? (
-        <Text style={styles.line} numberOfLines={1}>
-          Active: {activeWindow.title || activeWindow.process}
-        </Text>
+        <View style={styles.metaRow}>
+          <Text style={styles.metaKey}>Active</Text>
+          <Text style={styles.metaValue} numberOfLines={1}>
+            {activeWindow.title || activeWindow.process}
+          </Text>
+        </View>
       ) : null}
 
       {idleSecs != null ? (
-        <Text style={styles.line}>Idle for {idleLabel(idleSecs)}</Text>
+        <View style={styles.metaRow}>
+          <Text style={styles.metaKey}>Idle</Text>
+          <Text style={styles.metaValue}>{idleLabel(idleSecs)}</Text>
+        </View>
       ) : null}
 
       {system ? (
         <View style={styles.statsRow}>
-          <View style={styles.statTile}>
-            <Text style={styles.statValue}>{Math.round(system.cpu_percent)}%</Text>
-            <Text style={styles.statLabel}>CPU</Text>
-          </View>
-          <View style={styles.statTile}>
-            <Text style={styles.statValue}>{Math.round(system.memory_percent)}%</Text>
-            <Text style={styles.statLabel}>RAM</Text>
-          </View>
-          <View style={styles.statTile}>
-            <Text style={styles.statValue}>{Math.round(system.disk_percent)}%</Text>
-            <Text style={styles.statLabel}>Disk</Text>
-          </View>
+          <Stat value={system.cpu_percent} label="CPU" />
+          <Stat value={system.memory_percent} label="RAM" />
+          <Stat value={system.disk_percent} label="Disk" />
         </View>
       ) : null}
+    </Card>
+  );
+}
+
+/** One telemetry tile. Amber above 85% — the only threshold worth flagging. */
+function Stat({ value, label }: { value: number; label: string }) {
+  const hot = value >= 85;
+  return (
+    <View style={styles.statTile}>
+      <Text style={[styles.statValue, hot ? { color: color.signal } : null]}>
+        {Math.round(value)}
+        <Text style={styles.statUnit}>%</Text>
+      </Text>
+      <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#f3f4f6', borderRadius: 12, padding: 16, gap: 6 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  laptopId: { fontSize: 18, fontWeight: '700' },
-  muted: { color: '#666' },
-  line: { fontSize: 14, color: '#222' },
-  error: { color: '#c0392b' },
-  badgeGroup: { flexDirection: 'row', gap: 6 },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-  badgeLocked: { backgroundColor: '#fde68a' },
-  badgeUnlocked: { backgroundColor: '#bbf7d0' },
-  badgeLive: { backgroundColor: '#bbf7d0' },
-  badgeStale: { backgroundColor: '#e5e7eb' },
-  badgeText: { fontSize: 12, fontWeight: '600' },
-  statsRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  statTile: { flex: 1, backgroundColor: '#fff', borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
-  statValue: { fontSize: 15, fontWeight: '700' },
-  statLabel: { fontSize: 11, color: '#666' },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.sm,
+  },
+  laptopId: { ...type.title, flexShrink: 1 },
+  platform: { ...type.caption, marginTop: -space.xs },
+  muted: type.caption,
+  error: { ...type.body, color: color.danger, fontWeight: '700' },
+  badgeGroup: { flexDirection: 'row', gap: space.xs + 2 },
+
+  batteryBlock: { gap: space.sm, marginTop: space.sm },
+  batteryRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  batteryValue: type.readout,
+  track: {
+    height: 6,
+    borderRadius: radius.pill,
+    backgroundColor: color.bg,
+    borderWidth: 1,
+    borderColor: color.line,
+    overflow: 'hidden',
+  },
+  fill: { height: '100%', borderRadius: radius.pill },
+
+  metaRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
+  metaKey: { ...type.label, width: 52 },
+  metaValue: { ...type.body, flex: 1, color: color.textDim },
+
+  statsRow: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
+  statTile: {
+    flex: 1,
+    backgroundColor: color.surfaceRaised,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.line,
+    paddingVertical: space.sm + space.xs,
+    alignItems: 'center',
+    gap: 2,
+  },
+  statValue: { ...type.readout, fontSize: 18 },
+  statUnit: { fontSize: 12, fontWeight: '700', color: color.textMuted },
+  statLabel: type.label,
 });

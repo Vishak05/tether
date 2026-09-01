@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, StyleSheet, Text, View } from 'react-native';
 
 import { takeScreenshot } from '../api/commands';
 import { getApiErrorMessage } from '../api/errors';
+import { color, radius, space, type } from '../theme';
+import { Button } from './ui/Button';
 
 export function ScreenshotViewer() {
   const [uri, setUri] = useState<string | null>(null);
@@ -22,24 +24,39 @@ export function ScreenshotViewer() {
 
   return (
     <View style={styles.container}>
-      <Pressable style={styles.button} onPress={capture} disabled={busy}>
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Take Screenshot</Text>}
-      </Pressable>
-      {uri ? <Image source={{ uri }} style={styles.preview} resizeMode="contain" /> : null}
+      <Button
+        label={uri ? 'Capture again' : 'Take screenshot'}
+        onPress={capture}
+        busy={busy}
+        variant="secondary"
+      />
+
+      {/* An empty frame rather than nothing: it shows where the capture will
+          land and keeps the card from resizing when the first one arrives. */}
+      <View style={styles.frame}>
+        {uri ? (
+          <Image source={{ uri }} style={styles.preview} resizeMode="contain" />
+        ) : (
+          <Text style={styles.empty}>No capture yet</Text>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { gap: 12 },
-  button: {
-    backgroundColor: '#2563eb',
-    borderRadius: 10,
-    paddingVertical: 16,
+  container: { gap: space.md },
+  frame: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.line,
+    backgroundColor: color.bg,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 52,
+    overflow: 'hidden',
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  preview: { width: '100%', aspectRatio: 16 / 9, borderRadius: 10, backgroundColor: '#000' },
+  preview: { width: '100%', height: '100%' },
+  empty: type.caption,
 });
