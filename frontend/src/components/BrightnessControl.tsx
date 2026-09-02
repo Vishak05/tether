@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert } from 'react-native';
 
 import { setBrightness } from '../api/commands';
 import { getApiErrorMessage } from '../api/errors';
 import { useOptimisticLevel } from '../hooks/useOptimisticLevel';
-
-const STEP = 10;
+import { Slider } from './ui/Slider';
 
 interface Props {
   /** Laptop's current brightness from the live status heartbeat; null = not yet known or unavailable. */
@@ -14,10 +13,10 @@ interface Props {
   statusLoaded: boolean;
 }
 
-// Same stepper pattern as VolumeControl. Brightness now arrives on the status
-// heartbeat alongside everything else, rather than being fetched once on
-// mount — so changing brightness on the laptop is reflected here instead of
-// leaving a stale value that the next tap would snap back to.
+// Brightness arrives on the status heartbeat alongside everything else, rather
+// than being fetched once on mount — so changing brightness on the laptop is
+// reflected here instead of leaving a stale value that the next tap would snap
+// back to.
 export function BrightnessControl({ level: serverLevel, statusLoaded }: Props) {
   const { level, setPending } = useOptimisticLevel(serverLevel);
   const [busy, setBusy] = useState(false);
@@ -42,52 +41,5 @@ export function BrightnessControl({ level: serverLevel, statusLoaded }: Props) {
     }
   };
 
-  const disabled = busy || level == null;
-
-  return (
-    <View style={styles.row}>
-      <Text style={styles.label}>Brightness</Text>
-      <View style={styles.controls}>
-        <Pressable
-          style={[styles.stepButton, disabled && styles.stepButtonDisabled]}
-          disabled={disabled}
-          onPress={() => apply(level! - STEP)}
-        >
-          <Text style={styles.stepText}>−</Text>
-        </Pressable>
-        <Text style={styles.value}>{level != null ? `${level}%` : '…'}</Text>
-        <Pressable
-          style={[styles.stepButton, disabled && styles.stepButtonDisabled]}
-          disabled={disabled}
-          onPress={() => apply(level! + STEP)}
-        >
-          <Text style={styles.stepText}>+</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
+  return <Slider label="Brightness" level={level} onCommit={apply} disabled={busy} />;
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 10,
-    padding: 14,
-  },
-  label: { fontSize: 16, fontWeight: '600' },
-  controls: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  stepButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#2563eb',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepButtonDisabled: { backgroundColor: '#9ca3af' },
-  stepText: { color: '#fff', fontSize: 20, fontWeight: '700', lineHeight: 22 },
-  value: { fontSize: 16, minWidth: 48, textAlign: 'center' },
-});

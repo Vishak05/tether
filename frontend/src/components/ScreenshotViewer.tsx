@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, StyleSheet, View } from 'react-native';
 
 import { takeScreenshot } from '../api/commands';
 import { getApiErrorMessage } from '../api/errors';
+import { color, radius, space } from '../theme';
+import { Button } from './ui/Button';
 
 export function ScreenshotViewer() {
   const [uri, setUri] = useState<string | null>(null);
@@ -22,24 +24,29 @@ export function ScreenshotViewer() {
 
   return (
     <View style={styles.container}>
-      <Pressable style={styles.button} onPress={capture} disabled={busy}>
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Take Screenshot</Text>}
-      </Pressable>
+      <Button
+        label={uri ? 'Capture again' : 'Screenshot'}
+        onPress={capture}
+        busy={busy}
+        variant="secondary"
+      />
+
+      {/* Only rendered once there's something to show. An empty 16:9 frame
+          held ~170dp of nothing above the fold — a worse problem than the
+          card resizing that it was there to prevent. */}
       {uri ? <Image source={{ uri }} style={styles.preview} resizeMode="contain" /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { gap: 12 },
-  button: {
-    backgroundColor: '#2563eb',
-    borderRadius: 10,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 52,
+  container: { gap: space.sm },
+  preview: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.line,
+    backgroundColor: color.bg,
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  preview: { width: '100%', aspectRatio: 16 / 9, borderRadius: 10, backgroundColor: '#000' },
 });

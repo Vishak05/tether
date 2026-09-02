@@ -1,13 +1,18 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../../src/auth/AuthContext';
+import { Button } from '../../src/components/ui/Button';
+import { Input } from '../../src/components/ui/Input';
+import { color, space, type } from '../../src/theme';
 
 // Neither the /pair response nor its QR payload includes the laptop's IP/hostname
 // (see docs/phaseF_summary.md) — the user has to enter it once, here.
 export default function ConnectScreen() {
   const { connect } = useAuth();
+  const insets = useSafeAreaInsets();
   const [host, setHost] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -31,49 +36,62 @@ export default function ConnectScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={styles.title}>Connect to your laptop</Text>
-      <Text style={styles.subtitle}>
-        Enter the Tailscale IP (or local IP) and port the Tether agent is running on.
-      </Text>
-      <TextInput
-        style={styles.input}
-        placeholder="100.x.x.x:8765"
-        placeholderTextColor="#888"
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="url"
-        value={host}
-        onChangeText={setHost}
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable
-        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-        onPress={handleContinue}
-        disabled={submitting}
-      >
-        <Text style={styles.buttonText}>{submitting ? 'Connecting…' : 'Continue'}</Text>
-      </Pressable>
+      <View style={styles.body}>
+        <View style={styles.head}>
+          <Text style={styles.eyebrow}>Step 1 of 2</Text>
+          <Text style={styles.title}>Connect to your laptop</Text>
+          <Text style={styles.subtitle}>
+            Enter the address the Tether agent is running on — its Tailscale IP if you want this
+            to work away from home, or its local IP for the same Wi-Fi.
+          </Text>
+        </View>
+
+        <Input
+          label="Laptop address"
+          placeholder="100.x.x.x:8765"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          value={host}
+          onChangeText={(v) => {
+            setHost(v);
+            if (error) setError(null);
+          }}
+          onSubmitEditing={handleContinue}
+          returnKeyType="go"
+          error={error}
+          hint="Port 8765 unless you changed it."
+        />
+      </View>
+
+      {/* Action pinned to the bottom rather than following the text: it's the
+          only thing to do here, and it belongs in thumb reach. */}
+      <View style={styles.footer}>
+        <Button
+          label={submitting ? 'Connecting…' : 'Continue'}
+          onPress={handleContinue}
+          busy={submitting}
+        />
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: '700', marginBottom: 8 },
-  subtitle: { fontSize: 14, color: '#555', marginBottom: 24 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 8,
+  root: { flex: 1, backgroundColor: color.bg },
+  body: { flex: 1, justifyContent: 'center', paddingHorizontal: space.lg, gap: space.xl },
+  head: { gap: space.sm },
+  eyebrow: { ...type.label, color: color.signal },
+  title: type.display,
+  subtitle: type.caption,
+  footer: {
+    paddingHorizontal: space.lg,
+    paddingBottom: space.md,
+    paddingTop: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
   },
-  error: { color: '#c0392b', marginBottom: 12 },
-  button: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center' },
-  buttonPressed: { opacity: 0.8 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

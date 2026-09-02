@@ -1,7 +1,8 @@
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '../src/auth/AuthContext';
+import { color } from '../src/theme';
 
 // Root gate: routes to the right flow based on stored connection/session state.
 export default function Index() {
@@ -9,8 +10,8 @@ export default function Index() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" />
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={color.signal} />
       </View>
     );
   }
@@ -19,3 +20,7 @@ export default function Index() {
   if (!session) return <Redirect href="/(auth)/pair" />;
   return <Redirect href="/(app)" />;
 }
+
+const styles = StyleSheet.create({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: color.bg },
+});
