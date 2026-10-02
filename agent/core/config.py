@@ -18,6 +18,9 @@ PORT: int = int(os.getenv("TETHER_PORT", "8765"))
 # ──────────────────────────────────────────────
 LAPTOP_ID: str = os.getenv("TETHER_LAPTOP_ID", socket.gethostname())
 
+# Reported by GET /, GET /status and the OpenAPI docs.
+AGENT_VERSION: str = "0.4.0"
+
 # ──────────────────────────────────────────────
 # Logging
 # ──────────────────────────────────────────────

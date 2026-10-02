@@ -24,7 +24,7 @@ from agent.core.config import HOST, PORT, LOG_LEVEL
 if __name__ == "__main__":
     print(f"""
 ╔══════════════════════════════════════════╗
-║         Tether Agent — Phase 1          ║
+║               Tether Agent              ║
 ║  http://{HOST}:{PORT}                      ║
 ║  Docs: http://127.0.0.1:{PORT}/docs       ║
 ╚══════════════════════════════════════════╝

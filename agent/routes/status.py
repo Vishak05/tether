@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from agent.core import auth
-from agent.core.config import LAPTOP_ID, PLATFORM
+from agent.core.config import AGENT_VERSION, LAPTOP_ID, PLATFORM
 from agent.core.logging import get_logger
 from agent.os_layer import windows as win
 
@@ -25,7 +25,6 @@ log = get_logger("tether.status")
 
 # record when the agent started so we can report uptime
 _AGENT_START: float = time.time()
-AGENT_VERSION: str = "0.4.0-phase4"
 
 
 class StatusResponse(BaseModel):

@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from agent.core import db, proximity
-from agent.core.config import LAPTOP_ID, PLATFORM
+from agent.core.config import AGENT_VERSION, LAPTOP_ID, PLATFORM
 from agent.core.ip_filter import TailscaleIPMiddleware
 from agent.core.logging import get_logger
 from agent.routes.auth import router as auth_router
@@ -64,7 +64,7 @@ def create_app() -> FastAPI:
             "Laptop-side agent for the Tether remote control app. "
             "Exposes command and status endpoints consumed by the mobile client."
         ),
-        version="0.4.0-phase4",
+        version=AGENT_VERSION,
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
@@ -106,7 +106,7 @@ def create_app() -> FastAPI:
             "service":   "tether-agent",
             "laptop_id": LAPTOP_ID,
             "platform":  PLATFORM,
-            "version":   "0.4.0-phase4",
+            "version":   AGENT_VERSION,
             "status":    "ok",
         }
 
