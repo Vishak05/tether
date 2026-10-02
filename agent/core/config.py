@@ -116,14 +116,6 @@ INBOX_DIR.mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD_MB: int = int(os.getenv("TETHER_MAX_UPLOAD_MB", "100"))
 
 # ──────────────────────────────────────────────
-# Live clipboard sync
-# ──────────────────────────────────────────────
-
-# How often (seconds) each open /ws/clipboard connection polls the Windows
-# clipboard for changes to push to the phone.
-CLIPBOARD_POLL_INTERVAL_SECS: float = float(os.getenv("TETHER_CLIPBOARD_POLL_INTERVAL", "1.5"))
-
-# ──────────────────────────────────────────────
 # Proximity auto-lock (agent-side Bluetooth presence)
 # ──────────────────────────────────────────────
 
