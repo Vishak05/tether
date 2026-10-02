@@ -158,7 +158,8 @@ the same thing, for scanning from a browser.)
     active.
   - **Lock** / **Sleep** buttons, plus **Restart** / **Shut Down** (both
     behind a confirmation, since you won't be there to save your work).
-  - **Volume** and **Brightness** steppers (±10%). Both show the laptop's
+  - **Volume** and **Brightness** sliders (the value is sent when you let
+    go). Both show the laptop's
     *actual* current level and keep tracking it — change the volume on the
     laptop itself and the phone follows within a few seconds. Brightness is
     hidden on machines with no brightness-capable display (desktops, or some
