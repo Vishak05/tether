@@ -10,6 +10,10 @@ It can also **lock itself when you walk away**, by watching for your phone
 over Bluetooth. That runs entirely on the laptop, so it works with the phone
 app closed — see section 5.
 
+And it can give you a **terminal on the laptop** from your phone: a real
+shell inside WSL, in tmux sessions that keep running when you close the app
+and that you can pick up at the desk too — see section 7.
+
 This guide is for **using** the app. If you're looking for implementation
 details, see `tether-app-plan.md` and the `docs/phaseN_summary.md` files.
 
@@ -166,6 +170,7 @@ the same thing, for scanning from a browser.)
   - **Media** controls — previous / play-pause / next.
   - **Toggle Wi-Fi** button.
   - **Take Screenshot** — captures and displays the laptop's screen.
+- **Terminal** tab — a shell on the laptop, in WSL (section 7).
 - **Files** tab — move files both ways without a cable:
   - Anything you drop in the laptop's **`Tether Outbox`** folder (in your home
     directory) shows up here to download and save to your phone.
@@ -250,7 +255,72 @@ plain open-internet requests are rejected.
 
 ---
 
-## 7. Troubleshooting
+## 7. Remote terminal — a shell on the laptop from your phone
+
+The **Terminal** tab opens a real terminal on the laptop: a shell inside WSL,
+running in **tmux**. Because the session lives in tmux on the laptop, not in
+the app:
+
+- Closing the app, losing signal, or locking the phone only *detaches* you.
+  Whatever you were running keeps going; open the session again and it's all
+  still there.
+- You can open the **same session at the desk**. In a WSL shell on the laptop,
+  run `tmux attach -t tether` (or whichever session name), and the phone and
+  laptop show the same terminal.
+
+### Requirements (laptop)
+- WSL with a Linux distro, and tmux inside it (`sudo apt install tmux` on
+  Ubuntu).
+- `pywinpty`, which is in `agent/requirements.txt`. If you installed the
+  requirements before this feature existed, re-run
+  `py -3.14 -m pip install -r agent/requirements.txt`.
+- A phone app build that includes the Terminal tab. It added a native
+  dependency (`react-native-webview`), so build a new APK once (section 2).
+
+### Turning it on
+A terminal is full control of your account, so it's **off by default** and
+can only be switched on **at the laptop**. There's deliberately no way to do
+it from the phone, so a stolen phone can't grant itself a shell. From the
+`tether` folder:
+
+```powershell
+py -3.14 -m agent.scripts.terminal_access enable
+py -3.14 -m agent.scripts.terminal_access status          # lists paired phones
+py -3.14 -m agent.scripts.terminal_access allow "Pixel 8" # name or start of id
+```
+
+Every phone has to be allowed individually. The Terminal tab shows the exact
+`allow` command for the phone you're holding. Changes apply immediately, with
+no agent restart. To take access away, run `deny <phone>` or `disable`. Any
+open session from that phone is cut off within about 15 seconds; the tmux
+session itself keeps running on the laptop.
+
+### Using it
+- **Terminal tab**: lists running sessions (including ones started at the
+  laptop). **Open** one, **End** one (kills it and everything in it), or type
+  a name and open a new one. New sessions start in your WSL home directory.
+- **In a session**: tap the terminal to bring up the keyboard. The key row
+  along the bottom has what a phone keyboard lacks: Esc, Tab, a sticky
+  **Ctrl** (tap it, then a letter), ^C, arrows, PgUp/PgDn and a few symbols.
+  A−/A+ change the font size.
+- After 15 minutes without typing, the phone is disconnected; the session
+  keeps running. Tap **Reconnect**.
+
+### Things worth knowing
+- **Over plain Wi-Fi, the terminal is not encrypted.** The agent speaks
+  plain HTTP, so on the same network your keystrokes and output cross it
+  readable (the same is true of the rest of the app). Over Tailscale it's
+  encrypted. To refuse terminal connections that aren't over Tailscale, set
+  `TETHER_TERMINAL_TAILSCALE_ONLY=true` for the agent.
+- Scrolling back through output is tmux's job: `Ctrl-b` then `[` enters copy
+  mode, then PgUp/PgDn or arrows, and `q` to leave.
+- Other knobs (agent environment variables): `TETHER_TERMINAL_WSL_DISTRO`
+  (default: your default distro), `TETHER_TERMINAL_IDLE_TIMEOUT` (seconds,
+  default 900).
+
+---
+
+## 8. Troubleshooting
 
 **"Network error" when pairing or using the app**
 Check, in order: is the agent actually running? Is the address you entered
@@ -343,6 +413,22 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Select ProcessId, Co
 and stop the process shown. This is specific to `run.py`'s dev/reload mode —
 the scheduled task (section 1) doesn't use reload and doesn't have this issue.
 
+**Terminal tab says it's off, or that this phone isn't allowed**
+That's set on the laptop, not the phone — see section 7, "Turning it on". Pull
+down on the Terminal tab to refresh after running the command.
+
+**"Couldn't list sessions" or "Couldn't start tmux"**
+The agent couldn't run tmux in WSL. On the laptop, check that `wsl -e tmux -V`
+prints a version. If it says the command isn't found, install tmux inside WSL
+(`sudo apt install tmux`). If you use several distros, point the agent at the
+right one with `TETHER_TERMINAL_WSL_DISTRO`.
+
+**The Terminal tab opens a blank screen**
+The page comes from the agent, so a blank screen usually means the phone
+can't load `http://<laptop>:8765/terminal/page`. Check the same things as
+"Network error" above. If the rest of the app works, update the agent: older
+agents don't serve this page.
+
 ---
 
 ## Security notes
@@ -360,3 +446,8 @@ the scheduled task (section 1) doesn't use reload and doesn't have this issue.
 - Auto-lock detects your phone by asking it to list its Bluetooth services;
   it never connects to one. Nothing is read from the phone, and it raises no
   permission prompts.
+- The remote terminal is a shell as you, so it has its own gate on top of
+  pairing: it's off until switched on **at the laptop**, and each phone must be
+  allowed individually there. A phone can never grant itself access. Opening
+  and ending terminal sessions is audit-logged (not what's typed). Revoking a
+  device or running `deny` cuts off its open sessions within about 15 seconds.
