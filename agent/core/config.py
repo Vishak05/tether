@@ -18,6 +18,9 @@ PORT: int = int(os.getenv("TETHER_PORT", "8765"))
 # ──────────────────────────────────────────────
 LAPTOP_ID: str = os.getenv("TETHER_LAPTOP_ID", socket.gethostname())
 
+# Reported by GET /, GET /status and the OpenAPI docs.
+AGENT_VERSION: str = "0.4.0"
+
 # ──────────────────────────────────────────────
 # Logging
 # ──────────────────────────────────────────────
@@ -114,14 +117,6 @@ INBOX_DIR: Path = Path(os.getenv("TETHER_INBOX_DIR", str(Path.home() / "Tether I
 INBOX_DIR.mkdir(parents=True, exist_ok=True)
 
 MAX_UPLOAD_MB: int = int(os.getenv("TETHER_MAX_UPLOAD_MB", "100"))
-
-# ──────────────────────────────────────────────
-# Live clipboard sync
-# ──────────────────────────────────────────────
-
-# How often (seconds) each open /ws/clipboard connection polls the Windows
-# clipboard for changes to push to the phone.
-CLIPBOARD_POLL_INTERVAL_SECS: float = float(os.getenv("TETHER_CLIPBOARD_POLL_INTERVAL", "1.5"))
 
 # ──────────────────────────────────────────────
 # Proximity auto-lock (agent-side Bluetooth presence)

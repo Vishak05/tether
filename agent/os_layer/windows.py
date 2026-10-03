@@ -8,8 +8,8 @@ returns a dict:
     {"ok": True,  "result": <payload>}   — success
     {"ok": False, "error": <message>}    — failure
 
-Phase 4 will add a Linux layer alongside this file; the dispatcher in
-routes/commands.py selects the right layer at import time.
+Windows is the only supported platform; routes import this module
+directly.
 """
 import base64
 import ctypes
