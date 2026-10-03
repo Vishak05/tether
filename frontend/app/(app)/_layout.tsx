@@ -25,7 +25,9 @@ export default function AppLayout() {
         // and would force a rebuild), so the bar is typographic: wide-tracked
         // uppercase labels, which suits the instrument register anyway.
         tabBarIconStyle: { display: 'none' },
-        tabBarLabelStyle: { ...type.label, fontSize: 11 },
+        // Five tabs leave ~72dp each on a 360dp phone; this tighter tracking
+        // keeps the longest label ("Dashboard") from truncating.
+        tabBarLabelStyle: { ...type.label, fontSize: 10, letterSpacing: 0.6 },
         tabBarStyle: {
           backgroundColor: color.surface,
           borderTopColor: color.line,
@@ -38,6 +40,7 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Dashboard' }} />
+      <Tabs.Screen name="terminal" options={{ title: 'Terminal' }} />
       <Tabs.Screen name="files" options={{ title: 'Files' }} />
       <Tabs.Screen name="devices" options={{ title: 'Devices' }} />
       <Tabs.Screen name="settings" options={{ title: 'Settings' }} />

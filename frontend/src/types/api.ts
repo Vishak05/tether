@@ -179,3 +179,31 @@ export interface FileEntry {
 export interface FileListResponse {
   files: FileEntry[];
 }
+
+// ── Remote terminal ─────────────────────────────────────────────────────────
+// Mirrors agent/routes/terminal.py. Turning it on and allowing a device are
+// done on the laptop (agent/scripts/terminal_access.py), never from here.
+
+export interface TerminalSession {
+  name: string;
+  windows: number;
+  /** Clients attached right now — the laptop's own tmux counts too. */
+  attached: number;
+  /** UNIX seconds */
+  created: number;
+  /** UNIX seconds */
+  activity: number;
+}
+
+export interface TerminalState {
+  enabled: boolean;
+  /** This device may use the terminal (enabled AND on the allow-list). */
+  allowed: boolean;
+  device_id: string;
+  tailscale_only: boolean;
+  via_tailscale: boolean;
+  /** Only populated when `allowed`. */
+  sessions: TerminalSession[];
+  /** WSL/tmux couldn't be queried; sessions is empty. */
+  error: string | null;
+}
