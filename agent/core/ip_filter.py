@@ -90,3 +90,15 @@ def is_source_allowed(ip: str | None) -> bool:
     if ip is None:
         return False
     return _is_allowed(ip, _default_networks, ALLOW_LOCALHOST)
+
+
+# Stricter check for traffic that shouldn't cross the plain LAN unencrypted
+# (the remote terminal, when TETHER_TERMINAL_TAILSCALE_ONLY is set).
+# Localhost still counts — it never leaves the machine.
+_tailnet_networks = _build_networks(TAILSCALE_CIDR, allow_private_lan=False)
+
+
+def is_tailscale_source(ip: str | None) -> bool:
+    if ip is None:
+        return False
+    return _is_allowed(ip, _tailnet_networks, ALLOW_LOCALHOST)

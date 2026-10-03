@@ -18,3 +18,7 @@ winrt-Windows.Devices.Bluetooth>=3.2.1
 winrt-Windows.Devices.Bluetooth.Rfcomm>=3.2.1
 winrt-Windows.Foundation>=3.2.1
 winrt-Windows.Foundation.Collections>=3.2.1
+
+# Remote terminal: drives a WSL tmux client through a Windows pseudo-console
+# (ConPTY). See agent/os_layer/wsl_tmux.py.
+pywinpty>=3.0

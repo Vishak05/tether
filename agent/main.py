@@ -25,6 +25,7 @@ from agent.routes.files import router as files_router
 from agent.routes.pair import router as pair_router
 from agent.routes.proximity import router as proximity_router
 from agent.routes.status import router as status_router
+from agent.routes.terminal import router as terminal_router
 from agent.routes.ws_status import router as ws_status_router
 
 log = get_logger("tether.app")
@@ -98,6 +99,7 @@ def create_app() -> FastAPI:
     app.include_router(ws_status_router)  # WS   /ws/status
     app.include_router(files_router)      # GET/POST /files/*
     app.include_router(proximity_router)  # GET/PATCH /proximity, GET /proximity/bonded
+    app.include_router(terminal_router)   # GET /terminal, WS /ws/terminal, page + assets
 
     # ── root ────────────────────────────────────────────────────────────────────
     @app.get("/", tags=["health"], summary="Root health check")

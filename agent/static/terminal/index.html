@@ -1,0 +1,299 @@
+<!doctype html>
+<!--
+  Tether remote terminal. Served by the agent at /terminal/page and shown by
+  the phone app in a WebView, so terminal UI changes ship with the agent and
+  never need a new APK.
+
+  Contract with the app (frontend/app/session/[name].tsx):
+    in   window.TETHER_TOKEN            set before this page loads
+         window.tether.setToken(t)      fresh token after a "need-token" request
+    out  ReactNativeWebView.postMessage(JSON) with
+         {type: "need-token"}           socket refused the token (expired)
+         {type: "state", state, detail} connection state, for the app's header
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content" />
+<title>Tether terminal</title>
+<link rel="stylesheet" href="vendor/xterm.css" />
+<style>
+  /* Mirrors frontend/src/theme so the WebView doesn't read as a foreign page. */
+  :root {
+    --bg: #14100E; --surface: #1E1815; --raised: #2A221E; --line: #3B322C;
+    --text: #F6F0EA; --dim: #C9BDB3; --muted: #A79A90;
+    --signal: #E8913A; --signal-wash: rgba(232, 145, 58, 0.14);
+    --danger: #E8564C;
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+    font-family: -apple-system, Roboto, "Segoe UI", sans-serif; -webkit-tap-highlight-color: transparent; }
+  body { display: flex; flex-direction: column; }
+  #term { flex: 1; min-height: 0; padding: 6px 4px 0 8px; }
+  .xterm .xterm-viewport { background-color: var(--bg) !important; }
+
+  #keys { display: flex; gap: 6px; padding: 8px; overflow-x: auto; background: var(--surface);
+    border-top: 1px solid var(--line); scrollbar-width: none; flex-shrink: 0; }
+  #keys::-webkit-scrollbar { display: none; }
+  #keys button { flex: 0 0 auto; min-width: 44px; height: 38px; padding: 0 10px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--raised); color: var(--text);
+    font: 600 14px ui-monospace, "Roboto Mono", monospace; touch-action: manipulation; }
+  #keys button:active { background: var(--line); }
+  #keys button.armed { background: var(--signal-wash); border-color: var(--signal); color: var(--signal); }
+  #keys .gap { flex: 0 0 4px; }
+
+  #overlay { position: fixed; inset: 0 0 56px 0; display: none; align-items: center; justify-content: center;
+    background: rgba(20, 16, 14, 0.82); padding: 24px; text-align: center; }
+  #overlay.show { display: flex; }
+  #overlay .box { max-width: 300px; }
+  #overlay h2 { margin: 0 0 6px; font-size: 18px; }
+  #overlay p { margin: 0 0 16px; color: var(--muted); font-size: 14px; line-height: 1.4; }
+  #overlay button { height: 44px; padding: 0 20px; border-radius: 10px; border: 0;
+    background: var(--signal); color: #17110C; font-weight: 700; font-size: 15px; }
+  #overlay button[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div id="term"></div>
+
+<div id="keys">
+  <button data-key="esc">Esc</button>
+  <button data-key="tab">Tab</button>
+  <button id="ctrl">Ctrl</button>
+  <button data-key="ctrl-c">^C</button>
+  <span class="gap"></span>
+  <button data-arrow="D">&larr;</button>
+  <button data-arrow="A">&uarr;</button>
+  <button data-arrow="B">&darr;</button>
+  <button data-arrow="C">&rarr;</button>
+  <span class="gap"></span>
+  <button data-send="|">|</button>
+  <button data-send="/">/</button>
+  <button data-send="-">-</button>
+  <button data-send="~">~</button>
+  <button data-key="pgup">PgUp</button>
+  <button data-key="pgdn">PgDn</button>
+  <span class="gap"></span>
+  <button id="smaller">A&minus;</button>
+  <button id="bigger">A+</button>
+</div>
+
+<div id="overlay"><div class="box">
+  <h2 id="ov-title"></h2>
+  <p id="ov-text"></p>
+  <button id="ov-action" hidden>Reconnect</button>
+</div></div>
+
+<script src="vendor/xterm.js"></script>
+<script src="vendor/addon-fit.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var params = new URLSearchParams(location.search);
+  var session = params.get("session") || "tether";
+  var token = window.TETHER_TOKEN || params.get("token") || "";
+
+  var FONT_KEY = "tether.terminal.fontSize";
+  var fontSize = 13;
+  try { fontSize = parseInt(localStorage.getItem(FONT_KEY), 10) || 13; } catch (e) {}
+
+  var term = new Terminal({
+    fontFamily: 'ui-monospace, "Roboto Mono", "Droid Sans Mono", monospace',
+    fontSize: fontSize,
+    cursorBlink: true,
+    scrollback: 1000,
+    theme: {
+      background: "#14100E", foreground: "#F6F0EA", cursor: "#E8913A", cursorAccent: "#14100E",
+      selectionBackground: "rgba(232, 145, 58, 0.35)",
+      black: "#2A221E", brightBlack: "#7A6D64",
+      red: "#E8564C", brightRed: "#F07A70",
+      green: "#52D6A8", brightGreen: "#7BE4BF",
+      yellow: "#E8C15A", brightYellow: "#F0D27F",
+      blue: "#6FA8DC", brightBlue: "#94C0E8",
+      magenta: "#C792EA", brightMagenta: "#D7AEF0",
+      cyan: "#5CC8D0", brightCyan: "#85D8DE",
+      white: "#C9BDB3", brightWhite: "#F6F0EA"
+    }
+  });
+  var fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(document.getElementById("term"));
+  fit.fit();
+
+  // ── bridge to the app ──────────────────────────────────────────────────────
+  function post(msg) {
+    if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(msg));
+  }
+  var waitingForToken = false;
+  window.tether = {
+    setToken: function (t) {
+      token = t || "";
+      if (waitingForToken) { waitingForToken = false; connect(); }
+    }
+  };
+
+  // ── overlay ────────────────────────────────────────────────────────────────
+  var overlay = document.getElementById("overlay");
+  var ovAction = document.getElementById("ov-action");
+  function showOverlay(title, text, actionLabel) {
+    document.getElementById("ov-title").textContent = title;
+    document.getElementById("ov-text").textContent = text;
+    ovAction.hidden = !actionLabel;
+    if (actionLabel) ovAction.textContent = actionLabel;
+    overlay.classList.add("show");
+  }
+  function hideOverlay() { overlay.classList.remove("show"); }
+  ovAction.addEventListener("click", function () { hideOverlay(); retries = 0; connect(); });
+
+  // ── socket ─────────────────────────────────────────────────────────────────
+  var ws = null;
+  var retries = 0;
+  var retryTimer = null;
+  var sessionOver = false;
+
+  function setState(state, detail) { post({ type: "state", state: state, detail: detail || null }); }
+
+  function send(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+  }
+
+  function connect() {
+    clearTimeout(retryTimer);
+    sessionOver = false;
+    var base = location.origin.replace(/^http/, "ws");
+    var url = base + "/ws/terminal?token=" + encodeURIComponent(token) +
+      "&session=" + encodeURIComponent(session) +
+      "&cols=" + term.cols + "&rows=" + term.rows;
+    setState("connecting");
+    ws = new WebSocket(url);
+
+    ws.onopen = function () {
+      retries = 0;
+      hideOverlay();
+      setState("live");
+      term.focus();
+    };
+
+    ws.onmessage = function (event) {
+      var msg;
+      try { msg = JSON.parse(event.data); } catch (e) { return; }
+      if (msg.type === "output") {
+        term.write(msg.data);
+      } else if (msg.type === "exit") {
+        sessionOver = true;
+        if (msg.reason === "ended") {
+          showOverlay("Session ended", "The shell in “" + session + "” exited.", "Start it again");
+          setState("ended");
+        } else {
+          showOverlay("Detached", "“" + session + "” is still running on the laptop.", "Reattach");
+          setState("detached");
+        }
+      }
+    };
+
+    ws.onclose = function (event) {
+      ws = null;
+      if (sessionOver) return;
+      switch (event.code) {
+        case 4401:
+          // Usually just an expired access token: ask the app for a fresh one.
+          // A revoked device fails that refresh and the app leaves the screen.
+          waitingForToken = true;
+          setState("auth");
+          post({ type: "need-token" });
+          return;
+        case 4403:
+          setState("denied", event.reason);
+          showOverlay("Terminal unavailable", deniedText(event.reason), null);
+          return;
+        case 4408:
+          setState("idle");
+          showOverlay("Disconnected", "Dropped after a while without input. The session is still running.", "Reconnect");
+          return;
+        case 4400:
+          setState("denied", event.reason);
+          showOverlay("Can't open session", "“" + session + "” isn't a valid session name.", null);
+          return;
+        case 1011:
+          setState("error", event.reason);
+          showOverlay("Couldn't start tmux", "Check that WSL is installed and tmux is available in it.", "Try again");
+          return;
+      }
+      // Anything else is the network: keep trying, backing off to 10s.
+      retries += 1;
+      var delay = Math.min(10000, 1000 * Math.pow(2, Math.min(retries - 1, 4)));
+      setState("reconnecting");
+      showOverlay("Reconnecting…", "Lost the connection to the laptop.", null);
+      retryTimer = setTimeout(connect, delay);
+    };
+  }
+
+  function deniedText(reason) {
+    if (reason === "disabled") return "The remote terminal has been turned off on the laptop.";
+    if (reason === "not_allowed") return "This phone is no longer allowed to use the terminal.";
+    if (reason === "tailscale only") return "The terminal only works over Tailscale. Switch the laptop address to its Tailscale IP.";
+    return "The laptop refused the connection.";
+  }
+
+  // ── input ──────────────────────────────────────────────────────────────────
+  var ctrlArmed = false;
+  var ctrlButton = document.getElementById("ctrl");
+  function setCtrl(on) { ctrlArmed = on; ctrlButton.classList.toggle("armed", on); }
+
+  term.onData(function (data) {
+    // Sticky Ctrl from the key row applies to the next typed character.
+    if (ctrlArmed && data.length === 1) {
+      var code = data.toUpperCase().charCodeAt(0);
+      if (code >= 64 && code <= 95) data = String.fromCharCode(code - 64);
+      setCtrl(false);
+    }
+    send({ type: "input", data: data });
+  });
+
+  var KEY_SEQUENCES = { esc: "\x1b", tab: "\t", "ctrl-c": "\x03", pgup: "\x1b[5~", pgdn: "\x1b[6~" };
+  var keys = document.getElementById("keys");
+  // Keep focus (and so the soft keyboard) on the terminal while tapping keys.
+  keys.addEventListener("mousedown", function (e) { e.preventDefault(); });
+  keys.addEventListener("click", function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    if (b.id === "ctrl") { setCtrl(!ctrlArmed); return; }
+    if (b.id === "smaller" || b.id === "bigger") { setFont(fontSize + (b.id === "bigger" ? 1 : -1)); return; }
+    if (b.dataset.arrow) {
+      // Full-screen apps (vim, less) switch the terminal into application
+      // cursor mode and expect ESC O x rather than ESC [ x.
+      var app = term.modes && term.modes.applicationCursorKeysMode;
+      send({ type: "input", data: (app ? "\x1bO" : "\x1b[") + b.dataset.arrow });
+    } else if (b.dataset.key) {
+      send({ type: "input", data: KEY_SEQUENCES[b.dataset.key] });
+    } else if (b.dataset.send) {
+      send({ type: "input", data: b.dataset.send });
+    }
+    term.focus();
+  });
+
+  function setFont(size) {
+    fontSize = Math.max(9, Math.min(22, size));
+    term.options.fontSize = fontSize;
+    try { localStorage.setItem(FONT_KEY, String(fontSize)); } catch (e) {}
+    refit();
+  }
+
+  // ── sizing ─────────────────────────────────────────────────────────────────
+  var resizeTimer = null;
+  function refit() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      fit.fit();
+      send({ type: "resize", cols: term.cols, rows: term.rows });
+    }, 80);
+  }
+  // The soft keyboard opening shrinks the WebView, which lands here.
+  window.addEventListener("resize", refit);
+  document.getElementById("term").addEventListener("click", function () { term.focus(); });
+
+  connect();
+})();
+</script>
+</body>
+</html>

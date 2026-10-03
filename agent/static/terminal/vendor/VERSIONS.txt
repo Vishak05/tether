@@ -1,0 +1,7 @@
+Vendored so the terminal page works without reaching a CDN.
+
+@xterm/xterm      6.0.0   lib/xterm.js, css/xterm.css
+@xterm/addon-fit  0.11.0  lib/addon-fit.js
+
+Both MIT; licenses alongside. To update, replace these files from the
+packages' npm tarballs and bump the versions above.

@@ -152,3 +152,27 @@ PROXIMITY_MIN_POLL_INTERVAL_SECS: int = 10
 PROXIMITY_MAX_POLL_INTERVAL_SECS: int = 300
 PROXIMITY_MIN_MISS_THRESHOLD: int = 1
 PROXIMITY_MAX_MISS_THRESHOLD: int = 20
+
+# ──────────────────────────────────────────────
+# Remote terminal (WSL tmux over /ws/terminal)
+# ──────────────────────────────────────────────
+
+# Whether it's on, and which devices may use it, live in agent_settings and
+# are changed only from the laptop (agent/scripts/terminal_access.py) — never
+# from the phone. These are the fixed knobs around it.
+
+# Which WSL distro to run tmux in. Empty means the default distro.
+TERMINAL_WSL_DISTRO: str = os.getenv("TETHER_TERMINAL_WSL_DISTRO", "")
+
+# Detach a phone that has sent no input for this long. Only the phone's
+# connection is dropped — the tmux session keeps running on the laptop.
+TERMINAL_IDLE_TIMEOUT_SECS: int = int(os.getenv("TETHER_TERMINAL_IDLE_TIMEOUT", "900"))
+
+# How often an open terminal re-checks that its device is still trusted and
+# still allowed, so revoking access cuts off a live session promptly.
+TERMINAL_RECHECK_SECS: float = float(os.getenv("TETHER_TERMINAL_RECHECK_SECS", "15"))
+
+# Refuse terminal connections arriving over the plain LAN. Tailscale traffic
+# is encrypted by WireGuard; same-WiFi traffic to this agent is plain HTTP,
+# so keystrokes would cross the network readable.
+TERMINAL_TAILSCALE_ONLY: bool = os.getenv("TETHER_TERMINAL_TAILSCALE_ONLY", "false").lower() == "true"
